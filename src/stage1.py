@@ -137,6 +137,49 @@ DSTAR_TRK_LEGS = (("dstar_trkK", "ds.trkK"), ("dstar_trkPi", "ds.trkPi"),
 # the internal D0 legs: no output block, only their track indices are used
 D0_TRK_LEGS = (("d0_trkK", "d0.trkK"), ("d0_trkPi", "d0.trkPi"))
 
+# ALEPH's own reconstruction results exported by the converter (analyzer_alephvars.h), written
+# without any selection.
+DEDX_HYPOS = ("ele", "mu", "pi", "kaon", "proton")   # must match AlephVars::kNHyp and its hypothesis order
+# per-track dE/dx hypotheses: (branch infix, collection, parameter count)
+TRK_DEDX_DETS = (("wires", "dEdxWiresPID", "kNParDedx"), ("pads", "dEdxPadsPID", "kNParDedx"))
+TRK_DEDX_QDEDXM = ("wiresQDEDXM", "dEdxWiresQDEDXMPID", "kNParQDEDXM")   # simulation only
+# (branch suffix, member of AlephVars::TrackDedx); the QDEDXM block has no nSamples (= the wires')
+TRK_DEDX_MEMBERS = (("value", "value"), ("nSamples", "nSamples")) + tuple(
+    (f"{_q}_{_h}", f"{_q}[{_k}]") for _k, _h in enumerate(DEDX_HYPOS) for _q in ("expected", "sigma"))
+TRK_DEDX_QDEDXM_MEMBERS = tuple(m for m in TRK_DEDX_MEMBERS if m[0] != "nSamples")
+# YV0V V0 candidates: (branch suffix, member of AlephVars::AlephV0s); fitCode and the track indices are int
+YV0_MEMBERS = (("vx", "vx"), ("vy", "vy"), ("vz", "vz")) + tuple(
+    # must match the 6 packed elements of AlephVars::AlephV0s::cov (edm4hep covMatrix order)
+    (f"cov_{_c}", f"cov[{_k}]") for _k, _c in enumerate(("xx", "yx", "yy", "zx", "zy", "zz"))) + (
+    ("chi2", "chi2"), ("fitCode", "fitCode"), ("helixDistance", "helixDistance"),
+    ("alpha", "alpha"), ("qt", "qt"), ("covAlphaAlpha", "covAlphaAlpha"), ("covAlphaQt", "covAlphaQt"),
+    ("covQtQt", "covQtQt"), ("px", "px"), ("py", "py"), ("pz", "pz"), ("mKs", "mKs"),
+    ("mLambda", "mLambda"), ("mLambdaBar", "mLambdaBar"), ("mGamma", "mGamma"),
+    ("trkPos_origIdx", "trkPos"), ("trkNeg_origIdx", "trkNeg"))
+YV0_INT_MEMBERS = ("fitCode", "trkPos", "trkNeg")   # must match the RVec<int> members of AlephVars::AlephV0s
+# beam spot and luminous region: (branch, member of AlephVars::AlephBeamSpot); algo is int
+BEAMSPOT_MEMBERS = tuple((f"BeamSpotALEPH_{_m}_cm", _m) for _m in ("x", "y", "z", "errx", "erry", "errz")) + (
+    ("BeamSpotALEPH_algo", "algo"),) + tuple(
+    (f"LuminousRegion_{_m}_cm", _m) for _m in ("sizex", "sizey", "sizez"))
+# converter collections each block reads; "truth" (QDEDXM and the best match) is simulation only
+ALEPH_VAR_COLLECTIONS = {
+    "dEdx": ("dEdxWiresPID", "_dEdxWiresPID_parameters", "dEdxPadsPID", "_dEdxPadsPID_parameters"),
+    "truth": ("dEdxWiresQDEDXMPID", "_dEdxWiresQDEDXMPID_parameters",
+              "_dEdxWiresQDEDXMMCLink_from", "_dEdxWiresQDEDXMMCLink_to", "_MCParticles_parents"),
+    "yv0": ("V0Vertices", "_V0Vertices_particles", "V0VerticesRefitted", "_V0VerticesRefitted_parameters",
+            "_V0VerticesRefitted_particles", "RefittedParticles"),
+    "beamspot": ("BeamSpot", "LuminousRegion"),
+}
+# the branches of each block, as the --oldConverter warning names them
+ALEPH_VAR_BLOCK_BRANCHES = {"dEdx": "trk_dEdx_wires_*, trk_dEdx_pads_*",
+                            "truth": "trk_dEdx_wiresQDEDXM_*, trk_truePdg, trk_trueMotherPdg",
+                            "yv0": "n_yv0_event, yv0_*", "beamspot": "BeamSpotALEPH_*, LuminousRegion_*"}
+ALEPH_VAR_BRANCHES = tuple(
+    [f"trk_dEdx_{_d}_{_b}" for _d, _, _ in TRK_DEDX_DETS for _b, _ in TRK_DEDX_MEMBERS]
+    + [f"trk_dEdx_{TRK_DEDX_QDEDXM[0]}_{_b}" for _b, _ in TRK_DEDX_QDEDXM_MEMBERS]
+    + ["trk_truePdg", "trk_trueMotherPdg", "n_yv0_event"] + [f"yv0_{_b}" for _b, _ in YV0_MEMBERS]
+    + [_b for _b, _ in BEAMSPOT_MEMBERS])
+
 
 def _cand_member(block, branch):
     """Member path of a D0/D* candidate branch inside DstarCands."""
@@ -191,6 +234,8 @@ class Analysis():
                             help='baseline track selection without the minimum-TPC-hits and |z0| requirements, for the vertex fit and every finder (V0, secondary vertex, phi->KK, D*); also changes trk_member bit 9.')
         parser.add_argument('--oldPV', action='store_true',
                             help='Legacy PV chain: get_PrimaryTracks + VertexFitter_Tk and the origin-referenced track pre-selection, instead of the standalone fitter and its beamspot-referenced window (no pv_* flag branches).')
+        parser.add_argument('--oldConverter', action='store_true',
+                            help='accept an input of an older converter version, made before the dE/dx-hypothesis, V0-word, beam-spot and (MC) QDEDXM collections existed: their branches are written as -999 placeholders instead of stopping.')
         # Parse additional arguments not known to the FCCAnalyses parsers
         # All command line arguments know to fccanalysis are provided in the
         # `cmdline_arg` dictionary.
@@ -321,6 +366,7 @@ class Analysis():
         # V0 daughter branches join through (sec2origIdx index map, candidate
         # getters, vertex-fit glue) carry no truth and run on data too.
         self.include_paths = ["aleph_units.h", "aleph_reco_config.h", "analyzer.h", "analyzer_pvnew.h", "analyzer_truth.h", "analyzer_trkaux.h"]
+        self.include_paths.append("analyzer_alephvars.h")
         # the SV module reuses the V0 module's candidate getters
         if self.do_v0new or self.do_svnew:
             self.include_paths.append("analyzer_v0new.h")
@@ -358,7 +404,80 @@ class Analysis():
         default vertex at the origin (analyzer_trkaux.h)."""
         return f"VertexObject_looseBS.ntracks >= FCCAnalyses::AlephTrkAux::kPVMinTracks ? {expr} : {empty}"
 
+    def _aleph_var_blocks(self, df):
+        """The blocks of ALEPH_VAR_COLLECTIONS the input has all collections of. A missing one
+        stops stage1 here, before any event is read, unless --oldConverter."""
+        have = set(str(c) for c in df.GetColumnNames())
+        missing = {}
+        for block, colls in ALEPH_VAR_COLLECTIONS.items():
+            if block == "truth" and self.ana_args.doData:
+                continue
+            absent = [c for c in colls if c not in have]
+            if absent:
+                missing[block] = absent
+        if missing:
+            absent = ", ".join(c for cs in missing.values() for c in cs)
+            if not self.ana_args.oldConverter:
+                print(f"----> ERROR: the input lacks the converter collections {absent} (converted with an older "
+                      "converter version); pass --oldConverter to write their branches as -999 placeholders.")
+                sys.exit(1)
+            # flushed now: a multi-threaded event loop can leave stdout redirected
+            branches = "; ".join(ALEPH_VAR_BLOCK_BRANCHES[b] for b in missing)
+            print(f"----> WARNING: --oldConverter: the input lacks {absent}; the branches {branches} "
+                  "are written as -999 placeholders.", flush=True)
+        return {b for b in ALEPH_VAR_COLLECTIONS if b not in missing}
+
+    def _define_aleph_vars(self, df):
+        """The ALEPH_VAR_BRANCHES (analyzer_alephvars.h). Placeholders (kNotAvailable = -999):
+        per-track arrays of -999 and n_yv0_event = -999 with empty yv0 arrays; on data the
+        simulation-only block (trk_dEdx_wiresQDEDXM_*, trk_truePdg, trk_trueMotherPdg) is always a placeholder."""
+        AV = "FCCAnalyses::AlephVars"
+        blocks = self._aleph_blocks
+        if self.ana_args.doData:
+            blocks = blocks - {"truth"}
+        na_trk = {t: f"ROOT::VecOps::RVec<{t}>(Tracks.size(), {AV}::kNotAvailable{'Int' if t == 'int' else ''})"
+                  for t in ("float", "int")}
+        # per-track dE/dx hypotheses, QDEDXM (simulation; an empty QDEDXM collection reads -999)
+        for (det, coll, npar), members, block in [(d, TRK_DEDX_MEMBERS, "dEdx") for d in TRK_DEDX_DETS] + \
+                                                 [(TRK_DEDX_QDEDXM, TRK_DEDX_QDEDXM_MEMBERS, "truth")]:
+            if block in blocks:
+                empty_ok = "true" if block == "truth" else "false"
+                df = df.Define(f"trkDedx_{det}", f'{AV}::trackDedx({coll}, _{coll}_parameters, Tracks.size(), '
+                                                 f'{AV}::{npar}, "{coll}", {empty_ok})')
+            for b, m in members:
+                df = df.Define(f"trk_dEdx_{det}_{b}", f"trkDedx_{det}.{m}" if block in blocks else na_trk["float"])
+        # best-match MC particle of each track and its parent (simulation; -999 with an empty QDEDXM collection)
+        if "truth" in blocks:
+            df = df.Define("trkBestMatch", f"{AV}::trackBestMatchTruth(Tracks.size(), dEdxWiresQDEDXMPID.empty(), "
+                                           "_dEdxWiresQDEDXMMCLink_from, _dEdxWiresQDEDXMMCLink_to, MCParticles, "
+                                           "_MCParticles_parents)")
+        for b, m in (("trk_truePdg", "pdg"), ("trk_trueMotherPdg", "motherPdg")):
+            df = df.Define(b, f"trkBestMatch.{m}" if "truth" in blocks else na_trk["int"])
+        # YV0V V0 candidates, daughters joined to the Tracks index through their RecoParticles
+        if "yv0" in blocks:
+            require_words = "false" if self.ana_args.oldConverter else "true"
+            df = df.Define("AlephV0s_event",
+                           f"{AV}::alephV0s(V0Vertices, _V0Vertices_particles, V0VerticesRefitted, "
+                           "_V0VerticesRefitted_parameters, _V0VerticesRefitted_particles, RefittedParticles, "
+                           f"RecoParticles, _RecoParticles_tracks, Tracks.size(), {require_words})")
+            df = df.Define("n_yv0_event", "int(AlephV0s_event.vx.size())")
+        else:
+            df = df.Define("n_yv0_event", f"{AV}::kNotAvailableInt")
+        for b, m in YV0_MEMBERS:
+            t = "int" if m in YV0_INT_MEMBERS else "float"
+            df = df.Define(f"yv0_{b}", f"AlephV0s_event.{m}" if "yv0" in blocks else f"ROOT::VecOps::RVec<{t}>{{}}")
+        # beam spot and luminous region
+        if "beamspot" in blocks:
+            df = df.Define("AlephBeamSpot_event", f"{AV}::alephBeamSpot(BeamSpot, LuminousRegion)")
+        for b, m in BEAMSPOT_MEMBERS:
+            df = df.Define(b, f"AlephBeamSpot_event.{m}" if "beamspot" in blocks
+                           else f"{AV}::kNotAvailable{'Int' if m == 'algo' else ''}")
+        return df
+
     def analyzers(self, df):
+
+        # converter collections of the ALEPH-variable blocks, checked before any event is read
+        self._aleph_blocks = self._aleph_var_blocks(df)
 
         coll = {
         "GenParticles": "MCParticles",
@@ -838,6 +957,10 @@ class Analysis():
         df = df.Define("trk_member", "trkTags.member")
         df = df.Define("trk_nCand",  "trkTags.nCand")
 
+        ############################################# ALEPH's own reconstruction, as converted ################################
+        # per-track dE/dx hypotheses and best-match truth, YV0V V0s, beam spot (no selection)
+        df = self._define_aleph_vars(df)
+
         ############################################# Particle Flow Level Variables #######################################################
         df = df.Define("pfcand_isMu",     "AlephSelection::get_isType(jetConstitutentsTypes,2)")
         df = df.Define("pfcand_isEl",     "AlephSelection::get_isType(jetConstitutentsTypes,1)")
@@ -1116,6 +1239,8 @@ class Analysis():
             # per-original-track membership bitmask + stored-candidate multiplicity
             "trk_member",
             "trk_nCand",
+            # ALEPH's own reconstruction, as converted (per track, per YV0V V0, per event)
+            *ALEPH_VAR_BRANCHES,
 
             # gen level vertex & resolutions
             "gen_vertex_x",

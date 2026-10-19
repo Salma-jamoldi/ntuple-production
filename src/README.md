@@ -358,6 +358,41 @@ Compared with ntuples produced without this selection:
 
 `EVT_Thrust_Mag` is the thrust T of the analysis particles, computed exactly with `Algorithms::calculate_thrust`. `EVT_Thrust_X/Y/Z` is the thrust axis as a unit vector, oriented towards the hemisphere with the lower energy of analysis particles, and `EVT_Thrust_cosTheta` is its polar-angle cosine. An event with fewer than two analysis particles would get T = −1, axis (0, 0, 0) and `EVT_Thrust_cosTheta` = −2; the event selection (at least two jets) keeps no such event.
 
+### ALEPH's own reconstruction (converter collections)
+
+stage1 also writes, without any selection, results of ALEPH's own reconstruction that the converter exports ([`analyzer_alephvars.h`](analyzer_alephvars.h); definitions in the [converter's README](https://gitlab.cern.ch/aleph/l2e)). −999 means not available.
+
+Per track, arrays over the whole `Tracks` collection like `trk_member` (a leg reads `trk_dEdx_*[<leg>_origIdx]`, a jet constituent `trk_dEdx_*[pfcand_trackIdx]`); h = `ele`, `mu`, `pi`, `kaon`, `proton`:
+
+| branch | definition | unit | −999 |
+| --- | --- | --- | --- |
+| `trk_dEdx_{wires,pads}_value`, `_nSamples` | TPC wire / pad dE/dx and its number of samples (`dEdxWiresPID`, `dEdxPadsPID`, one entry per track) | normalised, ≈ 1 for a minimum-ionising particle | no measurement: ALPHA error code (`ParticleID.type`) ≠ 0 or dE/dx ≤ 0; then in every branch of that track and detector |
+| `trk_dEdx_{wires,pads}_{expected,sigma}_<h>` | ALPHA's expected dE/dx and resolution (momentum error included) for hypothesis h; the pull is (value − expected)/sigma | as `_value` | also for a hypothesis with error code 5 (expected dE/dx 0; low-momentum kaons and protons, pads) |
+| `trk_dEdx_wiresQDEDXM_{value,expected_<h>,sigma_<h>}` | simulation: ALPHA's simulated wire dE/dx (`QDEDXM`), for comparison | as above | as above; always on data |
+| `trk_truePdg` | simulation: PDG code of ALPHA's best-matching MC particle (`KBESTM`) | — | always on data; 0 = no best match |
+| `trk_trueMotherPdg` | simulation: PDG code of the (first) parent of that MC particle (`MCParticles` parents) | — | always on data; 0 = no best match or no parent |
+
+These differ from `pfcand_dEdx_*` and `<leg>_dEdx_*`, which read the `dEdxWires`/`dEdxPads` measurements of a dummy 1 GeV hypothesis (no pad value below about 0.15-0.2 GeV in 1994). stage1 stops if a dE/dx collection does not hold exactly one entry per track; an empty QDEDXM collection (a simulated event without the ALPHA MC banks) instead gives −999 in that event's QDEDXM and truth branches.
+
+Per ALEPH V0 candidate (`YV0V`), in the order of `V0Vertices`, `n_yv0_event` per event (the Mini-DST keeps at most 29 per event in the 1994 data of version 202, 50 in simulation):
+
+| branch | definition | unit |
+| --- | --- | --- |
+| `yv0_vx/vy/vz`, `yv0_cov_{xx,yx,yy,zx,zy,zz}` | vertex and its covariance (packed lower triangle) | cm, cm² |
+| `yv0_chi2`, `yv0_fitCode`, `yv0_helixDistance` | vertex-fit χ², fit code ((fit hypothesis·10 + \|IND\|)·sign(IND); hypothesis 2 is not a fit), distance of the helices before the fit | —, —, cm |
+| `yv0_alpha`, `yv0_qt`, `yv0_cov{AlphaAlpha,AlphaQt,QtQt}` | Armenteros α and qT of the refitted daughters and their covariance | —, GeV, (—, GeV, GeV²) |
+| `yv0_px/py/pz` | sum of the refitted daughter momenta | GeV |
+| `yv0_mKs`, `yv0_mLambda`, `yv0_mLambdaBar`, `yv0_mGamma` | mass of the refitted pair as π⁺π⁻, pπ⁻, π⁺p̄, e⁺e⁻ (positive daughter first) | GeV |
+| `yv0_trk{Pos,Neg}_origIdx` | `Tracks` index of the positive / negative daughter; the converter links a daughter through its energy-flow object, so one without it reads −1 (1.7 % of the daughters in four 1994 data and simulation files) | — |
+
+On Mini-DST input, a candidate whose `YV0V` recomputation failed in ALPHA can keep values of the previous candidate, possibly of an earlier event (always `yv0_fitCode`), without a flag.
+
+Per event, for comparison only (stage1 uses its own beam spot, `Beamspot_*`): `BeamSpotALEPH_{x,y,z}_cm` and `BeamSpotALEPH_err{x,y,z}_cm`, ALEPH's beam position and its uncertainty (`BeamSpot`); `BeamSpotALEPH_algo`, its origin (ALPHA `QWHICH_BP`, 4 = a chunk of consecutive events, with z = 0 and a 1 cm uncertainty; in simulation ALPHA's emulation); `LuminousRegion_size{x,y,z}_cm`, the rms size of the luminous region (`LuminousRegion`, centred on the beam position). Lengths in cm; −999 when the collection is empty.
+
+stage1 also stops on inconsistent V0 daughters, two best-match links for one track or more than one beam-spot entry in an event.
+
+An input converted before these collections existed (e.g. the older official EDM4hep files) stops stage1 with an error naming the missing collections, before any event is read. `--oldConverter` (data and MC) runs it instead and writes −999 placeholders for the missing collections: per-track arrays of −999, `n_yv0_event` −999 with empty `yv0_*` arrays; with it, V0 candidates without the `YV0V` words read −999 in `yv0_fitCode`, `yv0_helixDistance` and the Armenteros branches.
+
 ### Run on batch:
 ```
 fccanalysis submit stage1.py -- --tag VXX-XX --MCflavour X --batch --chunks X
