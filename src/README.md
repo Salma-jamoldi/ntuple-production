@@ -366,10 +366,11 @@ Per track, arrays over the whole `Tracks` collection like `trk_member` (a leg re
 
 | branch | definition | unit | −999 |
 | --- | --- | --- | --- |
-| `trk_dEdx_{wires,pads}_value`, `_nSamples` | TPC wire / pad dE/dx and its number of samples (`dEdxWiresPID`, `dEdxPadsPID`, one entry per track) | normalised, ≈ 1 for a minimum-ionising particle | no measurement: ALPHA error code (`ParticleID.type`) ≠ 0 or dE/dx ≤ 0; then in every branch of that track and detector |
+| `trk_dEdx_{wires,pads}_value`, `_nSamples`, `_trackLength` | TPC wire / pad dE/dx, its number of samples and the track length it is measured on (`dEdxWiresPID`, `dEdxPadsPID`, one entry per track) | normalised, ≈ 1 for a minimum-ionising particle; —; cm | no measurement: ALPHA error code ≠ 0 or dE/dx ≤ 0; then in every branch of that track and detector except `_errorCode` |
+| `trk_dEdx_{wires,pads}_errorCode` | ALPHA error code of the measurement (`ParticleID.type`), 0 = measured | — | never, if the collection is there |
 | `trk_dEdx_{wires,pads}_{expected,sigma}_<h>` | ALPHA's expected dE/dx and resolution (momentum error included) for hypothesis h | as `_value` | also for a hypothesis with error code 5 (expected dE/dx 0; low-momentum kaons and protons, pads) |
 | `trk_dEdx_{wires,pads}_pull_<h>` | pull (value − expected_h)/sigma_h | — | when `_value` or `_expected_<h>` is −999 or `_sigma_<h>` ≤ 0 |
-| `trk_dEdx_wiresQDEDXM_{value,expected_<h>,sigma_<h>,pull_<h>}` | simulation: ALPHA's simulated wire dE/dx (`QDEDXM`), for comparison | as above | as above; always on data |
+| `trk_dEdx_wiresQDEDXM_{value,errorCode,expected_<h>,sigma_<h>,pull_<h>}` | simulation: ALPHA's simulated wire dE/dx (`QDEDXM`; for MC runs up to 2000, error code 5 = nothing simulated: see the converter's README), for comparison | as above | as above; always on data |
 | `trk_truePdg` | simulation: PDG code of ALPHA's best-matching MC particle (`KBESTM`) | — | always on data; 0 = no best match |
 | `trk_trueMotherPdg` | simulation: PDG code of the immediate parent of that MC particle (`MCParticles` parents): a simulated particle for a detector-simulation secondary (the photon of a conversion electron), a quark for a hadron from the string | — | always on data; 0 = no best match or no parent |
 | `trk_trueP` | simulation: momentum of the best-matching MC particle | GeV | always on data; also with no best match (`trk_truePdg` 0) |

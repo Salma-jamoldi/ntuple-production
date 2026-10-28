@@ -43,16 +43,18 @@ constexpr int kNHyp = 5;
 constexpr int kNParDedx = 13;
 constexpr int kNParQDEDXM = 17;
 
-// Per-track arrays of one dE/dx collection. A track without a usable
-// measurement (ParticleID type != 0, or dEdx <= 0) reads kNotAvailable in
-// every array; a hypothesis with ALPHA error code 5 (expected_h == 0) reads
+// Per-track arrays of one dE/dx collection. errorCode is the ParticleID type
+// (ALPHA error code, 0 = measured) of every entry. A track without a usable
+// measurement (type != 0, or dEdx <= 0) reads kNotAvailable in every other
+// array; a hypothesis with ALPHA error code 5 (expected_h == 0) reads
 // kNotAvailable in expected[h], sigma[h] and pull[h]. pull[h] = (value -
 // expected[h]) / sigma[h], kNotAvailable if expected[h] is kNotAvailable or
 // sigma[h] <= 0. With emptyIsMissing, an empty collection (QDEDXM in a
-// simulated event without the ALPHA MC banks) reads kNotAvailable for every
-// track.
+// simulated event without the ALPHA MC banks) reads kNotAvailable(Int) for
+// every track.
 struct TrackDedx {
-  RVec<float> value, nSamples;
+  RVec<float> value, nSamples, trackLength;
+  RVec<int> errorCode;
   RVec<float> expected[kNHyp], sigma[kNHyp], pull[kNHyp];
 };
 
@@ -70,6 +72,8 @@ inline TrackDedx trackDedx(const RVec<edm4hep::ParticleIDData>& pid,
   TrackDedx out;
   out.value = RVec<float>(nTracks, kNotAvailable);
   out.nSamples = RVec<float>(nTracks, kNotAvailable);
+  out.trackLength = RVec<float>(nTracks, kNotAvailable);
+  out.errorCode = RVec<int>(nTracks, kNotAvailableInt);
   for (int h = 0; h < kNHyp; ++h) {
     out.expected[h] = RVec<float>(nTracks, kNotAvailable);
     out.sigma[h] = RVec<float>(nTracks, kNotAvailable);
@@ -84,9 +88,11 @@ inline TrackDedx trackDedx(const RVec<edm4hep::ParticleIDData>& pid,
                                std::to_string(t) + " does not hold " +
                                std::to_string(nPar) + " parameters");
     const float* p = params.data() + e.parameters_begin;
+    out.errorCode[t] = e.type;
     if (e.type != 0 || !(p[0] > 0.f)) continue;
     out.value[t] = p[0];
     out.nSamples[t] = p[1];
+    out.trackLength[t] = p[2];
     for (int h = 0; h < kNHyp; ++h) {
       if (p[3 + 2 * h] == 0.f) continue;  // error code 5 for this hypothesis
       out.expected[h][t] = p[3 + 2 * h];

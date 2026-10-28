@@ -143,10 +143,13 @@ DEDX_HYPOS = ("ele", "mu", "pi", "kaon", "proton")   # must match AlephVars::kNH
 # per-track dE/dx hypotheses: (branch infix, collection, parameter count)
 TRK_DEDX_DETS = (("wires", "dEdxWiresPID", "kNParDedx"), ("pads", "dEdxPadsPID", "kNParDedx"))
 TRK_DEDX_QDEDXM = ("wiresQDEDXM", "dEdxWiresQDEDXMPID", "kNParQDEDXM")   # simulation only
-# (branch suffix, member of AlephVars::TrackDedx); the QDEDXM block has no nSamples (= the wires')
-TRK_DEDX_MEMBERS = (("value", "value"), ("nSamples", "nSamples")) + tuple(
+# (branch suffix, member of AlephVars::TrackDedx); the QDEDXM block has no nSamples and trackLength (those of the
+# wires, except the nSamples that QDEDXM rescales for some 1992 MC)
+TRK_DEDX_MEMBERS = (("value", "value"), ("nSamples", "nSamples"), ("trackLength", "trackLength"),
+                    ("errorCode", "errorCode")) + tuple(
     (f"{_q}_{_h}", f"{_q}[{_k}]") for _k, _h in enumerate(DEDX_HYPOS) for _q in ("expected", "sigma", "pull"))
-TRK_DEDX_QDEDXM_MEMBERS = tuple(m for m in TRK_DEDX_MEMBERS if m[0] != "nSamples")
+TRK_DEDX_QDEDXM_MEMBERS = tuple(m for m in TRK_DEDX_MEMBERS if m[0] not in ("nSamples", "trackLength"))
+TRK_DEDX_INT_MEMBERS = ("errorCode",)   # must match the RVec<int> members of AlephVars::TrackDedx
 # best-match truth per track: (branch, member of AlephVars::TrackTruth, type)
 TRK_TRUTH_MEMBERS = (("trk_truePdg", "pdg", "int"), ("trk_trueMotherPdg", "motherPdg", "int"),
                      ("trk_trueP", "p", "float"), ("trk_trueVtx_r", "vtxR", "float"),
@@ -455,7 +458,8 @@ class Analysis():
                 df = df.Define(f"trkDedx_{det}", f'{AV}::trackDedx({coll}, _{coll}_parameters, Tracks.size(), '
                                                  f'{AV}::{npar}, "{coll}", {empty_ok})')
             for b, m in members:
-                df = df.Define(f"trk_dEdx_{det}_{b}", f"trkDedx_{det}.{m}" if block in blocks else na_trk["float"])
+                df = df.Define(f"trk_dEdx_{det}_{b}", f"trkDedx_{det}.{m}" if block in blocks
+                               else na_trk["int" if m in TRK_DEDX_INT_MEMBERS else "float"])
         # best-match MC particle of each track, its parent, momentum and production vertex
         # (simulation; -999 with an empty QDEDXM collection)
         if "truth" in blocks:
