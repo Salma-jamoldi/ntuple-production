@@ -109,30 +109,39 @@ inline TrackDedx trackDedx(const RVec<edm4hep::ParticleIDData>& pid,
 // the best-match MC particle and of its immediate parent in the MCParticles
 // parents relation (0 = no best match or no parent), the MCParticles index of
 // both (-1 = none), and the momentum and production vertex (transverse radius
-// and z) of the best-match particle (kNotAvailable = no best match). noQDEDXM
-// (empty QDEDXM collections: a simulated event without the ALPHA MC banks)
-// gives kNotAvailable(Int) for every track; the link must then be empty too.
+// and z) of the best-match particle (kNotAvailable = no best match). From
+// trackMCLink (track <-> MC particle, weight = fraction of shared track
+// coordinates): the number of links of the track and the weight of its link to
+// the best-match particle (the first such link; -1 = not linked there,
+// kNotAvailable = no best match). noQDEDXM (empty QDEDXM collections: a
+// simulated event without the ALPHA MC banks) gives kNotAvailable(Int) for
+// every track; the link must then be empty too.
 struct TrackTruth {
   RVec<int> pdg, motherPdg, idx, motherIdx;
   RVec<float> p, vtxR, vtxZ;
+  RVec<int> nLinks;
+  RVec<float> sharedFrac;
 };
 
 inline TrackTruth trackBestMatchTruth(size_t nTracks, bool noQDEDXM,
                                       const RVec<podio::ObjectID>& from,
                                       const RVec<podio::ObjectID>& to,
                                       const RVec<edm4hep::MCParticleData>& mc,
-                                      const RVec<podio::ObjectID>& mcParents) {
+                                      const RVec<podio::ObjectID>& mcParents,
+                                      const RVec<podio::ObjectID>& linkFrom,
+                                      const RVec<podio::ObjectID>& linkTo,
+                                      const RVec<float>& linkWeight) {
   if (noQDEDXM && !from.empty())
     throw std::runtime_error("AlephVars::trackBestMatchTruth: dEdxWiresQDEDXMMCLink has " +
                              std::to_string(from.size()) +
                              " entries but dEdxWiresQDEDXMPID is empty");
   const RVec<float> na(nTracks, kNotAvailable);
   const RVec<int> naInt(nTracks, kNotAvailableInt);
-  if (noQDEDXM) return {naInt, naInt, naInt, naInt, na, na, na};
+  if (noQDEDXM) return {naInt, naInt, naInt, naInt, na, na, na, naInt, na};
   if (from.size() != to.size())
     throw std::runtime_error("AlephVars::trackBestMatchTruth: link size mismatch");
   TrackTruth out{RVec<int>(nTracks, 0), RVec<int>(nTracks, 0), RVec<int>(nTracks, -1),
-                 RVec<int>(nTracks, -1), na, na, na};
+                 RVec<int>(nTracks, -1), na, na, na, RVec<int>(nTracks, 0), na};
   RVec<char> seen(nTracks, 0);
   for (size_t i = 0; i < from.size(); ++i) {
     const int t = from[i].index, m = to[i].index;
@@ -146,6 +155,7 @@ inline TrackTruth trackBestMatchTruth(size_t nTracks, bool noQDEDXM,
     const auto& p = mc[m];
     out.pdg[t] = p.PDG;
     out.idx[t] = m;
+    out.sharedFrac[t] = -1.f;
     out.p[t] = std::sqrt((double)p.momentum.x * p.momentum.x + (double)p.momentum.y * p.momentum.y +
                          (double)p.momentum.z * p.momentum.z);
     out.vtxR[t] = std::hypot((double)p.vertex.x, (double)p.vertex.y);
@@ -156,6 +166,15 @@ inline TrackTruth trackBestMatchTruth(size_t nTracks, bool noQDEDXM,
       throw std::runtime_error("AlephVars::trackBestMatchTruth: MCParticles parent out of range");
     out.motherPdg[t] = mc[q].PDG;
     out.motherIdx[t] = q;
+  }
+  if (linkFrom.size() != linkTo.size() || linkWeight.size() != linkFrom.size())
+    throw std::runtime_error("AlephVars::trackBestMatchTruth: trackMCLink size mismatch");
+  for (size_t i = 0; i < linkFrom.size(); ++i) {
+    const int t = linkFrom[i].index, m = linkTo[i].index;
+    if (t < 0 || (size_t)t >= nTracks || m < 0 || (size_t)m >= mc.size())
+      throw std::runtime_error("AlephVars::trackBestMatchTruth: trackMCLink entry out of range");
+    ++out.nLinks[t];
+    if (m == out.idx[t] && out.sharedFrac[t] == -1.f) out.sharedFrac[t] = linkWeight[i];
   }
   return out;
 }
