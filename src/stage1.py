@@ -145,7 +145,7 @@ TRK_DEDX_DETS = (("wires", "dEdxWiresPID", "kNParDedx"), ("pads", "dEdxPadsPID",
 TRK_DEDX_QDEDXM = ("wiresQDEDXM", "dEdxWiresQDEDXMPID", "kNParQDEDXM")   # simulation only
 # (branch suffix, member of AlephVars::TrackDedx); the QDEDXM block has no nSamples (= the wires')
 TRK_DEDX_MEMBERS = (("value", "value"), ("nSamples", "nSamples")) + tuple(
-    (f"{_q}_{_h}", f"{_q}[{_k}]") for _k, _h in enumerate(DEDX_HYPOS) for _q in ("expected", "sigma"))
+    (f"{_q}_{_h}", f"{_q}[{_k}]") for _k, _h in enumerate(DEDX_HYPOS) for _q in ("expected", "sigma", "pull"))
 TRK_DEDX_QDEDXM_MEMBERS = tuple(m for m in TRK_DEDX_MEMBERS if m[0] != "nSamples")
 # YV0V V0 candidates: (branch suffix, member of AlephVars::AlephV0s); fitCode and the track indices are int
 YV0_MEMBERS = (("vx", "vx"), ("vy", "vy"), ("vz", "vz")) + tuple(

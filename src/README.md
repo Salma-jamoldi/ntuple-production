@@ -367,8 +367,9 @@ Per track, arrays over the whole `Tracks` collection like `trk_member` (a leg re
 | branch | definition | unit | −999 |
 | --- | --- | --- | --- |
 | `trk_dEdx_{wires,pads}_value`, `_nSamples` | TPC wire / pad dE/dx and its number of samples (`dEdxWiresPID`, `dEdxPadsPID`, one entry per track) | normalised, ≈ 1 for a minimum-ionising particle | no measurement: ALPHA error code (`ParticleID.type`) ≠ 0 or dE/dx ≤ 0; then in every branch of that track and detector |
-| `trk_dEdx_{wires,pads}_{expected,sigma}_<h>` | ALPHA's expected dE/dx and resolution (momentum error included) for hypothesis h; the pull is (value − expected)/sigma | as `_value` | also for a hypothesis with error code 5 (expected dE/dx 0; low-momentum kaons and protons, pads) |
-| `trk_dEdx_wiresQDEDXM_{value,expected_<h>,sigma_<h>}` | simulation: ALPHA's simulated wire dE/dx (`QDEDXM`), for comparison | as above | as above; always on data |
+| `trk_dEdx_{wires,pads}_{expected,sigma}_<h>` | ALPHA's expected dE/dx and resolution (momentum error included) for hypothesis h | as `_value` | also for a hypothesis with error code 5 (expected dE/dx 0; low-momentum kaons and protons, pads) |
+| `trk_dEdx_{wires,pads}_pull_<h>` | pull (value − expected_h)/sigma_h | — | when `_value` or `_expected_<h>` is −999 or `_sigma_<h>` ≤ 0 |
+| `trk_dEdx_wiresQDEDXM_{value,expected_<h>,sigma_<h>,pull_<h>}` | simulation: ALPHA's simulated wire dE/dx (`QDEDXM`), for comparison | as above | as above; always on data |
 | `trk_truePdg` | simulation: PDG code of ALPHA's best-matching MC particle (`KBESTM`) | — | always on data; 0 = no best match |
 | `trk_trueMotherPdg` | simulation: PDG code of the immediate parent of that MC particle (`MCParticles` parents): a simulated particle for a detector-simulation secondary (the photon of a conversion electron), a quark for a hadron from the string | — | always on data; 0 = no best match or no parent |
 

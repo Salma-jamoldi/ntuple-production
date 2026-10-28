@@ -46,12 +46,14 @@ constexpr int kNParQDEDXM = 17;
 // Per-track arrays of one dE/dx collection. A track without a usable
 // measurement (ParticleID type != 0, or dEdx <= 0) reads kNotAvailable in
 // every array; a hypothesis with ALPHA error code 5 (expected_h == 0) reads
-// kNotAvailable in expected[h] and sigma[h]. With emptyIsMissing, an empty
-// collection (QDEDXM in a simulated event without the ALPHA MC banks) reads
-// kNotAvailable for every track.
+// kNotAvailable in expected[h], sigma[h] and pull[h]. pull[h] = (value -
+// expected[h]) / sigma[h], kNotAvailable if expected[h] is kNotAvailable or
+// sigma[h] <= 0. With emptyIsMissing, an empty collection (QDEDXM in a
+// simulated event without the ALPHA MC banks) reads kNotAvailable for every
+// track.
 struct TrackDedx {
   RVec<float> value, nSamples;
-  RVec<float> expected[kNHyp], sigma[kNHyp];
+  RVec<float> expected[kNHyp], sigma[kNHyp], pull[kNHyp];
 };
 
 inline TrackDedx trackDedx(const RVec<edm4hep::ParticleIDData>& pid,
@@ -71,6 +73,7 @@ inline TrackDedx trackDedx(const RVec<edm4hep::ParticleIDData>& pid,
   for (int h = 0; h < kNHyp; ++h) {
     out.expected[h] = RVec<float>(nTracks, kNotAvailable);
     out.sigma[h] = RVec<float>(nTracks, kNotAvailable);
+    out.pull[h] = RVec<float>(nTracks, kNotAvailable);
   }
   for (size_t t = 0; t < pid.size(); ++t) {
     const auto& e = pid[t];
@@ -88,6 +91,8 @@ inline TrackDedx trackDedx(const RVec<edm4hep::ParticleIDData>& pid,
       if (p[3 + 2 * h] == 0.f) continue;  // error code 5 for this hypothesis
       out.expected[h][t] = p[3 + 2 * h];
       out.sigma[h][t] = p[4 + 2 * h];
+      if (p[3 + 2 * h] != kNotAvailable && p[4 + 2 * h] > 0.f)
+        out.pull[h][t] = (p[0] - p[3 + 2 * h]) / p[4 + 2 * h];
     }
   }
   return out;
