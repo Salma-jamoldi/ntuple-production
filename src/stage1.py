@@ -152,6 +152,7 @@ TRK_DEDX_QDEDXM_MEMBERS = tuple(m for m in TRK_DEDX_MEMBERS if m[0] not in ("nSa
 TRK_DEDX_INT_MEMBERS = ("errorCode",)   # must match the RVec<int> members of AlephVars::TrackDedx
 # best-match truth per track: (branch, member of AlephVars::TrackTruth, type)
 TRK_TRUTH_MEMBERS = (("trk_truePdg", "pdg", "int"), ("trk_trueMotherPdg", "motherPdg", "int"),
+                     ("trk_trueIdx", "idx", "int"), ("trk_trueMotherIdx", "motherIdx", "int"),
                      ("trk_trueP", "p", "float"), ("trk_trueVtx_r", "vtxR", "float"),
                      ("trk_trueVtx_z", "vtxZ", "float"))
 # YV0V V0 candidates: (branch suffix, member of AlephVars::AlephV0s); fitCode and the track indices are int
@@ -179,8 +180,7 @@ ALEPH_VAR_COLLECTIONS = {
 }
 # the branches of each block, as the --oldConverter warning names them
 ALEPH_VAR_BLOCK_BRANCHES = {"dEdx": "trk_dEdx_wires_*, trk_dEdx_pads_*",
-                            "truth": "trk_dEdx_wiresQDEDXM_*, trk_truePdg, trk_trueMotherPdg, trk_trueP, "
-                                     "trk_trueVtx_r, trk_trueVtx_z",
+                            "truth": "trk_dEdx_wiresQDEDXM_*, trk_true*",
                             "yv0": "n_yv0_event, yv0_*", "beamspot": "BeamSpotALEPH_*, LuminousRegion_*"}
 ALEPH_TRK_BRANCHES = tuple(
     [f"trk_dEdx_{_d}_{_b}" for _d, _, _ in TRK_DEDX_DETS for _b, _ in TRK_DEDX_MEMBERS]

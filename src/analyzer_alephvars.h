@@ -107,13 +107,13 @@ inline TrackDedx trackDedx(const RVec<edm4hep::ParticleIDData>& pid,
 // Truth of every track from ALPHA's best match (KBESTM), the
 // dEdxWiresQDEDXMMCLink relation (at most one link per track): the PDG code of
 // the best-match MC particle and of its immediate parent in the MCParticles
-// parents relation (0 = no best match or no parent), and the momentum and
-// production vertex (transverse radius and z) of the best-match particle
-// (kNotAvailable = no best match). noQDEDXM (empty QDEDXM collections: a
-// simulated event without the ALPHA MC banks) gives kNotAvailable(Int) for
-// every track; the link must then be empty too.
+// parents relation (0 = no best match or no parent), the MCParticles index of
+// both (-1 = none), and the momentum and production vertex (transverse radius
+// and z) of the best-match particle (kNotAvailable = no best match). noQDEDXM
+// (empty QDEDXM collections: a simulated event without the ALPHA MC banks)
+// gives kNotAvailable(Int) for every track; the link must then be empty too.
 struct TrackTruth {
-  RVec<int> pdg, motherPdg;
+  RVec<int> pdg, motherPdg, idx, motherIdx;
   RVec<float> p, vtxR, vtxZ;
 };
 
@@ -127,11 +127,12 @@ inline TrackTruth trackBestMatchTruth(size_t nTracks, bool noQDEDXM,
                              std::to_string(from.size()) +
                              " entries but dEdxWiresQDEDXMPID is empty");
   const RVec<float> na(nTracks, kNotAvailable);
-  if (noQDEDXM)
-    return {RVec<int>(nTracks, kNotAvailableInt), RVec<int>(nTracks, kNotAvailableInt), na, na, na};
+  const RVec<int> naInt(nTracks, kNotAvailableInt);
+  if (noQDEDXM) return {naInt, naInt, naInt, naInt, na, na, na};
   if (from.size() != to.size())
     throw std::runtime_error("AlephVars::trackBestMatchTruth: link size mismatch");
-  TrackTruth out{RVec<int>(nTracks, 0), RVec<int>(nTracks, 0), na, na, na};
+  TrackTruth out{RVec<int>(nTracks, 0), RVec<int>(nTracks, 0), RVec<int>(nTracks, -1),
+                 RVec<int>(nTracks, -1), na, na, na};
   RVec<char> seen(nTracks, 0);
   for (size_t i = 0; i < from.size(); ++i) {
     const int t = from[i].index, m = to[i].index;
@@ -144,6 +145,7 @@ inline TrackTruth trackBestMatchTruth(size_t nTracks, bool noQDEDXM,
     seen[t] = 1;
     const auto& p = mc[m];
     out.pdg[t] = p.PDG;
+    out.idx[t] = m;
     out.p[t] = std::sqrt((double)p.momentum.x * p.momentum.x + (double)p.momentum.y * p.momentum.y +
                          (double)p.momentum.z * p.momentum.z);
     out.vtxR[t] = std::hypot((double)p.vertex.x, (double)p.vertex.y);
@@ -153,6 +155,7 @@ inline TrackTruth trackBestMatchTruth(size_t nTracks, bool noQDEDXM,
     if (q < 0 || (size_t)q >= mc.size())
       throw std::runtime_error("AlephVars::trackBestMatchTruth: MCParticles parent out of range");
     out.motherPdg[t] = mc[q].PDG;
+    out.motherIdx[t] = q;
   }
   return out;
 }
