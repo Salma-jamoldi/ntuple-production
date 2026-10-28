@@ -179,11 +179,12 @@ ALEPH_VAR_BLOCK_BRANCHES = {"dEdx": "trk_dEdx_wires_*, trk_dEdx_pads_*",
                             "truth": "trk_dEdx_wiresQDEDXM_*, trk_truePdg, trk_trueMotherPdg, trk_trueP, "
                                      "trk_trueVtx_r, trk_trueVtx_z",
                             "yv0": "n_yv0_event, yv0_*", "beamspot": "BeamSpotALEPH_*, LuminousRegion_*"}
-ALEPH_VAR_BRANCHES = tuple(
+ALEPH_TRK_BRANCHES = tuple(
     [f"trk_dEdx_{_d}_{_b}" for _d, _, _ in TRK_DEDX_DETS for _b, _ in TRK_DEDX_MEMBERS]
     + [f"trk_dEdx_{TRK_DEDX_QDEDXM[0]}_{_b}" for _b, _ in TRK_DEDX_QDEDXM_MEMBERS]
-    + [_b for _b, _, _ in TRK_TRUTH_MEMBERS] + ["n_yv0_event"] + [f"yv0_{_b}" for _b, _ in YV0_MEMBERS]
-    + [_b for _b, _ in BEAMSPOT_MEMBERS])
+    + [_b for _b, _, _ in TRK_TRUTH_MEMBERS])
+ALEPH_YV0_BRANCHES = ("n_yv0_event",) + tuple(f"yv0_{_b}" for _b, _ in YV0_MEMBERS)   # only with --alephV0s
+ALEPH_BEAMSPOT_BRANCHES = tuple(_b for _b, _ in BEAMSPOT_MEMBERS)
 
 
 def _cand_member(block, branch):
@@ -239,6 +240,8 @@ class Analysis():
                             help='baseline track selection without the minimum-TPC-hits and |z0| requirements, for the vertex fit and every finder (V0, secondary vertex, phi->KK, D*); also changes trk_member bit 9.')
         parser.add_argument('--oldPV', action='store_true',
                             help='Legacy PV chain: get_PrimaryTracks + VertexFitter_Tk and the origin-referenced track pre-selection, instead of the standalone fitter and its beamspot-referenced window (no pv_* flag branches).')
+        parser.add_argument('--alephV0s', action='store_true',
+                            help="write ALEPH's own V0 candidates (YV0V: n_yv0_event and the yv0_* branches); without it they are neither computed nor written and their converter collections are not required.")
         parser.add_argument('--oldConverter', action='store_true',
                             help='accept an input of an older converter version, made before the dE/dx-hypothesis, V0-word, beam-spot and (MC) QDEDXM collections existed: their branches are written as -999 placeholders instead of stopping.')
         # Parse additional arguments not known to the FCCAnalyses parsers
@@ -410,11 +413,13 @@ class Analysis():
         return f"VertexObject_looseBS.ntracks >= FCCAnalyses::AlephTrkAux::kPVMinTracks ? {expr} : {empty}"
 
     def _aleph_var_blocks(self, df):
-        """The blocks of ALEPH_VAR_COLLECTIONS the input has all collections of. A missing one
-        stops stage1 here, before any event is read, unless --oldConverter."""
+        """The requested blocks of ALEPH_VAR_COLLECTIONS (yv0 only with --alephV0s) the input has all
+        collections of. A missing one stops stage1 here, before any event is read, unless --oldConverter."""
         have = set(str(c) for c in df.GetColumnNames())
+        wanted = [b for b in ALEPH_VAR_COLLECTIONS if b != "yv0" or self.ana_args.alephV0s]
         missing = {}
-        for block, colls in ALEPH_VAR_COLLECTIONS.items():
+        for block in wanted:
+            colls = ALEPH_VAR_COLLECTIONS[block]
             if block == "truth" and self.ana_args.doData:
                 continue
             absent = [c for c in colls if c not in have]
@@ -430,10 +435,10 @@ class Analysis():
             branches = "; ".join(ALEPH_VAR_BLOCK_BRANCHES[b] for b in missing)
             print(f"----> WARNING: --oldConverter: the input lacks {absent}; the branches {branches} "
                   "are written as -999 placeholders.", flush=True)
-        return {b for b in ALEPH_VAR_COLLECTIONS if b not in missing}
+        return {b for b in wanted if b not in missing}
 
     def _define_aleph_vars(self, df):
-        """The ALEPH_VAR_BRANCHES (analyzer_alephvars.h). Placeholders (kNotAvailable = -999):
+        """The ALEPH_*_BRANCHES (analyzer_alephvars.h; yv0 only with --alephV0s). Placeholders (kNotAvailable = -999):
         per-track arrays of -999 and n_yv0_event = -999 with empty yv0 arrays; on data the
         simulation-only block (trk_dEdx_wiresQDEDXM_*, trk_true*) is always a placeholder."""
         AV = "FCCAnalyses::AlephVars"
@@ -459,7 +464,7 @@ class Analysis():
                                            "_MCParticles_parents)")
         for b, m, t in TRK_TRUTH_MEMBERS:
             df = df.Define(b, f"trkBestMatch.{m}" if "truth" in blocks else na_trk[t])
-        # YV0V V0 candidates, daughters joined to the Tracks index through their RecoParticles
+        # YV0V V0 candidates (--alephV0s), daughters joined to the Tracks index through their RecoParticles
         if "yv0" in blocks:
             require_words = "false" if self.ana_args.oldConverter else "true"
             df = df.Define("AlephV0s_event",
@@ -467,11 +472,12 @@ class Analysis():
                            "_V0VerticesRefitted_parameters, _V0VerticesRefitted_particles, RefittedParticles, "
                            f"RecoParticles, _RecoParticles_tracks, Tracks.size(), {require_words})")
             df = df.Define("n_yv0_event", "int(AlephV0s_event.vx.size())")
-        else:
+        elif self.ana_args.alephV0s:
             df = df.Define("n_yv0_event", f"{AV}::kNotAvailableInt")
-        for b, m in YV0_MEMBERS:
-            t = "int" if m in YV0_INT_MEMBERS else "float"
-            df = df.Define(f"yv0_{b}", f"AlephV0s_event.{m}" if "yv0" in blocks else f"ROOT::VecOps::RVec<{t}>{{}}")
+        if self.ana_args.alephV0s:
+            for b, m in YV0_MEMBERS:
+                t = "int" if m in YV0_INT_MEMBERS else "float"
+                df = df.Define(f"yv0_{b}", f"AlephV0s_event.{m}" if "yv0" in blocks else f"ROOT::VecOps::RVec<{t}>{{}}")
         # beam spot and luminous region
         if "beamspot" in blocks:
             df = df.Define("AlephBeamSpot_event", f"{AV}::alephBeamSpot(BeamSpot, LuminousRegion)")
@@ -964,7 +970,7 @@ class Analysis():
         df = df.Define("trk_nCand",  "trkTags.nCand")
 
         ############################################# ALEPH's own reconstruction, as converted ################################
-        # per-track dE/dx hypotheses and best-match truth, YV0V V0s, beam spot (no selection)
+        # per-track dE/dx hypotheses and best-match truth, beam spot, YV0V V0s with --alephV0s (no selection)
         df = self._define_aleph_vars(df)
 
         ############################################# Particle Flow Level Variables #######################################################
@@ -1246,7 +1252,9 @@ class Analysis():
             "trk_member",
             "trk_nCand",
             # ALEPH's own reconstruction, as converted (per track, per YV0V V0, per event)
-            *ALEPH_VAR_BRANCHES,
+            *ALEPH_TRK_BRANCHES,
+            *(ALEPH_YV0_BRANCHES if self.ana_args.alephV0s else ()),
+            *ALEPH_BEAMSPOT_BRANCHES,
 
             # gen level vertex & resolutions
             "gen_vertex_x",
