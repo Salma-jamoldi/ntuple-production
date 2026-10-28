@@ -5,8 +5,9 @@
   ALEPH's own reconstruction results as exported by the converter, written as
   stage1 branches without any selection: the dE/dx hypotheses of every track
   (ALPHA QDEDX/QPADX, and QDEDXM in simulation), the best-match MC particle of
-  every track (ALPHA KBESTM) and its parent, the YV0V V0 candidates and the
-  beam spot and luminous region. Lengths cm, momenta and masses GeV. kNotAvailable (-999)
+  every track (ALPHA KBESTM) and its parent, the YV0V V0 candidates, the
+  beam spot and luminous region, the beam energy and the solenoid field.
+  Lengths cm, momenta and masses GeV. kNotAvailable (-999)
   marks a value that is missing or must not be used.
 */
 
@@ -330,6 +331,41 @@ inline AlephBeamSpot alephBeamSpot(const RVec<edm4hep::VertexData>& bs,
     out.sizey = sqrtOrNA(lr[0].covMatrix.values[2]);
     out.sizez = sqrtOrNA(lr[0].covMatrix.values[5]);
   }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// RunInformation (one float list per event), filled by the converter in this
+// order, each group only if its bank exists: RLEP LEP beam energy [MeV], MBFL
+// solenoid field [kG], RALE magnet polarity and three currents, MBLC LCAL and
+// SICAL luminosity. The size tells the groups apart: 8 or 4 (data / simulation
+// without RALE) hold the field, 7 or 3 come from a converter before the field
+// was exported (requireField = false accepts them: the field reads
+// kNotAvailable). Any other size stops stage1, and so does a first value that
+// is not a beam energy in MeV: a list without RLEP can have these sizes too.
+// ---------------------------------------------------------------------------
+struct AlephRunInfo {
+  float beamEnergy = kNotAvailable, bz = kNotAvailable;  // GeV, T
+};
+
+// The first RunInformation value must be a LEP beam energy in MeV; a field
+// in kG or a polarity is far below it.
+constexpr float kMinBeamEnergyMeV = 1000.f;
+
+inline AlephRunInfo alephRunInfo(const RVec<float>& ri, bool requireField) {
+  AlephRunInfo out;
+  const size_t n = ri.size();
+  const bool withField = n == 8 || n == 4;
+  if (!withField && !((n == 7 || n == 3) && !requireField))
+    throw std::runtime_error("AlephVars::alephRunInfo: RunInformation holds " + std::to_string(n) +
+                             " values, not the 8 or 4 of a converter that exports the magnetic field" +
+                             (n == 7 || n == 3 ? " (older converter: pass --oldConverter)" : ""));
+  if (!(ri[0] > kMinBeamEnergyMeV))
+    throw std::runtime_error("AlephVars::alephRunInfo: the first of the " + std::to_string(n) +
+                             " RunInformation values, " + std::to_string(ri[0]) +
+                             ", is not a LEP beam energy in MeV (RLEP bank missing?)");
+  out.beamEnergy = ri[0] / 1000.f;
+  if (withField) out.bz = ri[1] / 10.f;
   return out;
 }
 

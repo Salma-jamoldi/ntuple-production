@@ -396,9 +396,11 @@ On Mini-DST input, when ALPHA's `YV0V` recomputation fails, some or all `yv0_*` 
 
 Per event, for comparison only (stage1 uses its own beam spot, `Beamspot_*`): `BeamSpotALEPH_{x,y,z}_cm` and `BeamSpotALEPH_err{x,y,z}_cm`, ALEPH's beam position and its uncertainty (`BeamSpot`); `BeamSpotALEPH_algo`, its origin (ALPHA `QWHICH_BP`, 4 = a chunk of consecutive events, with z = 0 and a 1 cm uncertainty; in simulation ALPHA's emulation); `LuminousRegion_size{x,y,z}_cm`, the rms size of the luminous region (`LuminousRegion`, centred on the beam position). Lengths in cm; −999 when the collection is empty.
 
-stage1 stops when a converter collection breaks its documented layout, e.g. a dE/dx collection without one entry per track (an empty QDEDXM collection excepted), best-match links in an event without QDEDXM entries or a relation index out of range.
+Per event, from `RunInformation`: `EVT_Ebeam`, the LEP beam energy (`RLEP`) in GeV, and `EVT_Bz`, the solenoid field (`ALFIEL`, as exported by the converter) in T. stage1 itself uses the constant `AlephUnits::kBz` (1.5 T).
 
-An input converted before these collections existed (e.g. the older official EDM4hep files) stops stage1 with an error naming the missing collections, before any event is read. `--oldConverter` (data and MC) lets stage1 run instead and write −999 placeholders for the missing collections: per-track arrays of −999, `n_yv0_event` −999 with empty `yv0_*` arrays (with `--alephV0s`); with it, V0 candidates without the `YV0V` words read −999 in `yv0_fitCode`, `yv0_helixDistance` and the Armenteros branches.
+stage1 stops when a converter collection breaks its documented layout, e.g. a dE/dx collection without one entry per track (an empty QDEDXM collection excepted), best-match links in an event without QDEDXM entries, a relation index out of range or a `RunInformation` list of another layout.
+
+An input converted before these collections existed (e.g. the older official EDM4hep files) stops stage1 with an error naming the missing collections, before any event is read. `--oldConverter` (data and MC) lets stage1 run instead and write −999 placeholders for the missing collections: per-track arrays of −999, `n_yv0_event` −999 with empty `yv0_*` arrays (with `--alephV0s`); with it, V0 candidates without the `YV0V` words read −999 in `yv0_fitCode`, `yv0_helixDistance` and the Armenteros branches, and `EVT_Bz` reads −999 if `RunInformation` holds no field.
 
 ### Run on batch:
 ```

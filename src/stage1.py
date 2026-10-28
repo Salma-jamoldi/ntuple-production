@@ -179,17 +179,21 @@ ALEPH_VAR_COLLECTIONS = {
     "yv0": ("V0Vertices", "_V0Vertices_particles", "V0VerticesRefitted", "_V0VerticesRefitted_parameters",
             "_V0VerticesRefitted_particles", "RefittedParticles"),
     "beamspot": ("BeamSpot", "LuminousRegion"),
+    "runinfo": ("RunInformation",),
 }
 # the branches of each block, as the --oldConverter warning names them
 ALEPH_VAR_BLOCK_BRANCHES = {"dEdx": "trk_dEdx_wires_*, trk_dEdx_pads_*",
                             "truth": "trk_dEdx_wiresQDEDXM_*, trk_true*, trk_mcNLinks",
-                            "yv0": "n_yv0_event, yv0_*", "beamspot": "BeamSpotALEPH_*, LuminousRegion_*"}
+                            "yv0": "n_yv0_event, yv0_*", "beamspot": "BeamSpotALEPH_*, LuminousRegion_*",
+                            "runinfo": "EVT_Ebeam, EVT_Bz"}
 ALEPH_TRK_BRANCHES = tuple(
     [f"trk_dEdx_{_d}_{_b}" for _d, _, _ in TRK_DEDX_DETS for _b, _ in TRK_DEDX_MEMBERS]
     + [f"trk_dEdx_{TRK_DEDX_QDEDXM[0]}_{_b}" for _b, _ in TRK_DEDX_QDEDXM_MEMBERS]
     + [_b for _b, _, _ in TRK_TRUTH_MEMBERS])
 ALEPH_YV0_BRANCHES = ("n_yv0_event",) + tuple(f"yv0_{_b}" for _b, _ in YV0_MEMBERS)   # only with --alephV0s
-ALEPH_BEAMSPOT_BRANCHES = tuple(_b for _b, _ in BEAMSPOT_MEMBERS)
+# LEP beam energy [GeV] and solenoid field [T] (RunInformation): (branch, member of AlephVars::AlephRunInfo)
+RUNINFO_MEMBERS = (("EVT_Ebeam", "beamEnergy"), ("EVT_Bz", "bz"))
+ALEPH_EVENT_BRANCHES = tuple(_b for _b, _ in BEAMSPOT_MEMBERS) + tuple(_b for _b, _ in RUNINFO_MEMBERS)
 
 
 def _cand_member(block, branch):
@@ -248,7 +252,7 @@ class Analysis():
         parser.add_argument('--alephV0s', action='store_true',
                             help="write ALEPH's own V0 candidates (YV0V: n_yv0_event and the yv0_* branches); without it they are neither computed nor written and their converter collections are not required.")
         parser.add_argument('--oldConverter', action='store_true',
-                            help='accept an input of an older converter version, made before the dE/dx-hypothesis, V0-word, beam-spot and (MC) QDEDXM collections existed: their branches are written as -999 placeholders instead of stopping.')
+                            help='accept an input of an older converter version, made before the dE/dx-hypothesis, V0-word, beam-spot and (MC) QDEDXM collections or the magnetic field in RunInformation existed: their branches are written as -999 placeholders instead of stopping.')
         # Parse additional arguments not known to the FCCAnalyses parsers
         # All command line arguments know to fccanalysis are provided in the
         # `cmdline_arg` dictionary.
@@ -491,6 +495,12 @@ class Analysis():
         for b, m in BEAMSPOT_MEMBERS:
             df = df.Define(b, f"AlephBeamSpot_event.{m}" if "beamspot" in blocks
                            else f"{AV}::kNotAvailable{'Int' if m == 'algo' else ''}")
+        # LEP beam energy and solenoid field; with --oldConverter also from a converter that did not export the field
+        if "runinfo" in blocks:
+            require_field = "false" if self.ana_args.oldConverter else "true"
+            df = df.Define("AlephRunInfo_event", f"{AV}::alephRunInfo(RunInformation, {require_field})")
+        for b, m in RUNINFO_MEMBERS:
+            df = df.Define(b, f"AlephRunInfo_event.{m}" if "runinfo" in blocks else f"{AV}::kNotAvailable")
         return df
 
     def analyzers(self, df):
@@ -977,7 +987,8 @@ class Analysis():
         df = df.Define("trk_nCand",  "trkTags.nCand")
 
         ############################################# ALEPH's own reconstruction, as converted ################################
-        # per-track dE/dx hypotheses and best-match truth, beam spot, YV0V V0s with --alephV0s (no selection)
+        # per-track dE/dx hypotheses and best-match truth, beam spot, run information, YV0V V0s with --alephV0s
+        # (no selection)
         df = self._define_aleph_vars(df)
 
         ############################################# Particle Flow Level Variables #######################################################
@@ -1261,7 +1272,7 @@ class Analysis():
             # ALEPH's own reconstruction, as converted (per track, per YV0V V0, per event)
             *ALEPH_TRK_BRANCHES,
             *(ALEPH_YV0_BRANCHES if self.ana_args.alephV0s else ()),
-            *ALEPH_BEAMSPOT_BRANCHES,
+            *ALEPH_EVENT_BRANCHES,
 
             # gen level vertex & resolutions
             "gen_vertex_x",

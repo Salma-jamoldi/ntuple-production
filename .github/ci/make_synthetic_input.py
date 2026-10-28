@@ -41,7 +41,8 @@ size, kinematics and fractions are generic; nothing is fitted to ALEPH data.
     with the 30 YV0V words, RefittedParticles; the generated K0s/Lambda and random track pairs),
     BeamSpot and LuminousRegion (some events with a fallback beam position or none), and in
     the MC dEdxWiresQDEDXMPID and dEdxWiresQDEDXMMCLink. They come from a random stream of
-    their own, so the other collections do not depend on them.
+    their own, so the other collections do not depend on them. RunInformation holds the
+    beam energy (E_BEAM) and the field (BZ_TESLA).
 
 Conventions (those of the converted files):
   lengths cm, momenta GeV, Bz = 1.5 T; one track state per track, perigee to the origin;
@@ -64,7 +65,8 @@ import time
 
 import numpy as np
 
-KB = 0.0029979 * 1.5          # pT [GeV] = KB / |omega [1/cm]|
+BZ_TESLA = 1.5                # solenoid field [T]; RunInformation holds it in kG
+KB = 0.0029979 * BZ_TESLA     # pT [GeV] = KB / |omega [1/cm]|
 E_BEAM = 45.6
 CLASS_HADRONIC_BIT = 15       # class 16 = bit 15
 CLASS_LEPTONPAIR_BIT = 14     # class 15 = bit 14
@@ -882,7 +884,10 @@ def fill_frame(rng, ev, mode, run, ievt, classbits, stats, podio, edm4hep, ROOT,
     cb = ROOT.podio.UserDataCollection["uint32_t"]()
     cb.push_back(int(classbits))
     runinfo = ROOT.podio.UserDataCollection["float"]()
-    for x in (E_BEAM * 1e3, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0):   # placeholders, not read by stage1
+    # the converter's layout: beam energy [MeV], field [kG], then (data only) the RALE magnet words, then the
+    # two luminosities; stage1 reads the first two
+    bz_kg = BZ_TESLA * 10.0
+    for x in ((E_BEAM * 1e3, bz_kg, 0.0, 0.0) if is_mc else (E_BEAM * 1e3, bz_kg, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0)):
         runinfo.push_back(float(x))
 
     frame = podio.Frame()
