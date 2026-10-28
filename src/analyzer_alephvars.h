@@ -95,10 +95,10 @@ inline TrackDedx trackDedx(const RVec<edm4hep::ParticleIDData>& pid,
 
 // Truth of every track from ALPHA's best match (KBESTM), the
 // dEdxWiresQDEDXMMCLink relation (at most one link per track): the PDG code of
-// the best-match MC particle and of its (first) parent in the MCParticles
+// the best-match MC particle and of its immediate parent in the MCParticles
 // parents relation; 0 = no best match or no parent. noQDEDXM (empty QDEDXM
 // collections: a simulated event without the ALPHA MC banks) gives
-// kNotAvailableInt for every track.
+// kNotAvailableInt for every track; the link must then be empty too.
 struct TrackTruth {
   RVec<int> pdg, motherPdg;
 };
@@ -108,6 +108,10 @@ inline TrackTruth trackBestMatchTruth(size_t nTracks, bool noQDEDXM,
                                       const RVec<podio::ObjectID>& to,
                                       const RVec<edm4hep::MCParticleData>& mc,
                                       const RVec<podio::ObjectID>& mcParents) {
+  if (noQDEDXM && !from.empty())
+    throw std::runtime_error("AlephVars::trackBestMatchTruth: dEdxWiresQDEDXMMCLink has " +
+                             std::to_string(from.size()) +
+                             " entries but dEdxWiresQDEDXMPID is empty");
   if (noQDEDXM)
     return {RVec<int>(nTracks, kNotAvailableInt), RVec<int>(nTracks, kNotAvailableInt)};
   if (from.size() != to.size())

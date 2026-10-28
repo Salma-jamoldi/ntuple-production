@@ -370,9 +370,9 @@ Per track, arrays over the whole `Tracks` collection like `trk_member` (a leg re
 | `trk_dEdx_{wires,pads}_{expected,sigma}_<h>` | ALPHA's expected dE/dx and resolution (momentum error included) for hypothesis h; the pull is (value − expected)/sigma | as `_value` | also for a hypothesis with error code 5 (expected dE/dx 0; low-momentum kaons and protons, pads) |
 | `trk_dEdx_wiresQDEDXM_{value,expected_<h>,sigma_<h>}` | simulation: ALPHA's simulated wire dE/dx (`QDEDXM`), for comparison | as above | as above; always on data |
 | `trk_truePdg` | simulation: PDG code of ALPHA's best-matching MC particle (`KBESTM`) | — | always on data; 0 = no best match |
-| `trk_trueMotherPdg` | simulation: PDG code of the (first) parent of that MC particle (`MCParticles` parents) | — | always on data; 0 = no best match or no parent |
+| `trk_trueMotherPdg` | simulation: PDG code of the immediate parent of that MC particle (`MCParticles` parents): a simulated particle for a detector-simulation secondary (the photon of a conversion electron), a quark for a hadron from the string | — | always on data; 0 = no best match or no parent |
 
-These differ from `pfcand_dEdx_*` and `<leg>_dEdx_*`, which read the `dEdxWires`/`dEdxPads` measurements of a dummy 1 GeV hypothesis (no pad value below about 0.15-0.2 GeV in 1994). stage1 stops if a dE/dx collection does not hold exactly one entry per track; an empty QDEDXM collection (a simulated event without the ALPHA MC banks) instead gives −999 in that event's QDEDXM and truth branches.
+These differ from `pfcand_dEdx_*` and `<leg>_dEdx_*`, which read the `dEdxWires`/`dEdxPads` measurements of a dummy 1 GeV hypothesis (no pad value below about 0.15-0.2 GeV in 1994). A simulated event without the ALPHA MC banks (the MC truth, `FKIN`/`FVER` or `KINE`/`VERT`) has empty QDEDXM collections and reads −999 in `trk_dEdx_wiresQDEDXM_*`, `trk_truePdg` and `trk_trueMotherPdg`.
 
 Per ALEPH V0 candidate (`YV0V`), in the order of `V0Vertices`, `n_yv0_event` per event (the Mini-DST keeps at most 29 per event in the 1994 data of version 202, 50 in simulation):
 
@@ -382,16 +382,16 @@ Per ALEPH V0 candidate (`YV0V`), in the order of `V0Vertices`, `n_yv0_event` per
 | `yv0_chi2`, `yv0_fitCode`, `yv0_helixDistance` | vertex-fit χ², fit code ((fit hypothesis·10 + \|IND\|)·sign(IND); hypothesis 2 is not a fit), distance of the helices before the fit | —, —, cm |
 | `yv0_alpha`, `yv0_qt`, `yv0_cov{AlphaAlpha,AlphaQt,QtQt}` | Armenteros α and qT of the refitted daughters and their covariance | —, GeV, (—, GeV, GeV²) |
 | `yv0_px/py/pz` | sum of the refitted daughter momenta | GeV |
-| `yv0_mKs`, `yv0_mLambda`, `yv0_mLambdaBar`, `yv0_mGamma` | mass of the refitted pair as π⁺π⁻, pπ⁻, π⁺p̄, e⁺e⁻ (positive daughter first) | GeV |
-| `yv0_trk{Pos,Neg}_origIdx` | `Tracks` index of the positive / negative daughter; the converter links a daughter through its energy-flow object, so one without it reads −1 (1.7 % of the daughters in four 1994 data and simulation files) | — |
+| `yv0_mKs`, `yv0_mLambda`, `yv0_mLambdaBar`, `yv0_mGamma` | mass of the refitted pair as π⁺π⁻, pπ⁻, π⁺p̄, e⁺e⁻ (positive daughter first) | GeV; 0 if m² ≤ 0 |
+| `yv0_trk{Pos,Neg}_origIdx` | `Tracks` index of the positive / negative daughter; the converter links a daughter through its energy-flow object, so one without it reads −1 | — |
 
-On Mini-DST input, a candidate whose `YV0V` recomputation failed in ALPHA can keep values of the previous candidate, possibly of an earlier event (always `yv0_fitCode`), without a flag.
+On Mini-DST input, when ALPHA's `YV0V` recomputation fails, some or all `yv0_*` values of a candidate (always `yv0_fitCode`) keep those of the previous candidate, possibly of an earlier event, without a flag.
 
 Per event, for comparison only (stage1 uses its own beam spot, `Beamspot_*`): `BeamSpotALEPH_{x,y,z}_cm` and `BeamSpotALEPH_err{x,y,z}_cm`, ALEPH's beam position and its uncertainty (`BeamSpot`); `BeamSpotALEPH_algo`, its origin (ALPHA `QWHICH_BP`, 4 = a chunk of consecutive events, with z = 0 and a 1 cm uncertainty; in simulation ALPHA's emulation); `LuminousRegion_size{x,y,z}_cm`, the rms size of the luminous region (`LuminousRegion`, centred on the beam position). Lengths in cm; −999 when the collection is empty.
 
-stage1 also stops on inconsistent V0 daughters, two best-match links for one track or more than one beam-spot entry in an event.
+stage1 stops when a converter collection breaks its documented layout, e.g. a dE/dx collection without one entry per track (an empty QDEDXM collection excepted), best-match links in an event without QDEDXM entries or a relation index out of range.
 
-An input converted before these collections existed (e.g. the older official EDM4hep files) stops stage1 with an error naming the missing collections, before any event is read. `--oldConverter` (data and MC) runs it instead and writes −999 placeholders for the missing collections: per-track arrays of −999, `n_yv0_event` −999 with empty `yv0_*` arrays; with it, V0 candidates without the `YV0V` words read −999 in `yv0_fitCode`, `yv0_helixDistance` and the Armenteros branches.
+An input converted before these collections existed (e.g. the older official EDM4hep files) stops stage1 with an error naming the missing collections, before any event is read. `--oldConverter` (data and MC) lets stage1 run instead and write −999 placeholders for the missing collections: per-track arrays of −999, `n_yv0_event` −999 with empty `yv0_*` arrays; with it, V0 candidates without the `YV0V` words read −999 in `yv0_fitCode`, `yv0_helixDistance` and the Armenteros branches.
 
 ### Run on batch:
 ```
