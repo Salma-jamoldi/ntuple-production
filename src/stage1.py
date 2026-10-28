@@ -147,6 +147,10 @@ TRK_DEDX_QDEDXM = ("wiresQDEDXM", "dEdxWiresQDEDXMPID", "kNParQDEDXM")   # simul
 TRK_DEDX_MEMBERS = (("value", "value"), ("nSamples", "nSamples")) + tuple(
     (f"{_q}_{_h}", f"{_q}[{_k}]") for _k, _h in enumerate(DEDX_HYPOS) for _q in ("expected", "sigma", "pull"))
 TRK_DEDX_QDEDXM_MEMBERS = tuple(m for m in TRK_DEDX_MEMBERS if m[0] != "nSamples")
+# best-match truth per track: (branch, member of AlephVars::TrackTruth, type)
+TRK_TRUTH_MEMBERS = (("trk_truePdg", "pdg", "int"), ("trk_trueMotherPdg", "motherPdg", "int"),
+                     ("trk_trueP", "p", "float"), ("trk_trueVtx_r", "vtxR", "float"),
+                     ("trk_trueVtx_z", "vtxZ", "float"))
 # YV0V V0 candidates: (branch suffix, member of AlephVars::AlephV0s); fitCode and the track indices are int
 YV0_MEMBERS = (("vx", "vx"), ("vy", "vy"), ("vz", "vz")) + tuple(
     # must match the 6 packed elements of AlephVars::AlephV0s::cov (edm4hep covMatrix order)
@@ -172,12 +176,13 @@ ALEPH_VAR_COLLECTIONS = {
 }
 # the branches of each block, as the --oldConverter warning names them
 ALEPH_VAR_BLOCK_BRANCHES = {"dEdx": "trk_dEdx_wires_*, trk_dEdx_pads_*",
-                            "truth": "trk_dEdx_wiresQDEDXM_*, trk_truePdg, trk_trueMotherPdg",
+                            "truth": "trk_dEdx_wiresQDEDXM_*, trk_truePdg, trk_trueMotherPdg, trk_trueP, "
+                                     "trk_trueVtx_r, trk_trueVtx_z",
                             "yv0": "n_yv0_event, yv0_*", "beamspot": "BeamSpotALEPH_*, LuminousRegion_*"}
 ALEPH_VAR_BRANCHES = tuple(
     [f"trk_dEdx_{_d}_{_b}" for _d, _, _ in TRK_DEDX_DETS for _b, _ in TRK_DEDX_MEMBERS]
     + [f"trk_dEdx_{TRK_DEDX_QDEDXM[0]}_{_b}" for _b, _ in TRK_DEDX_QDEDXM_MEMBERS]
-    + ["trk_truePdg", "trk_trueMotherPdg", "n_yv0_event"] + [f"yv0_{_b}" for _b, _ in YV0_MEMBERS]
+    + [_b for _b, _, _ in TRK_TRUTH_MEMBERS] + ["n_yv0_event"] + [f"yv0_{_b}" for _b, _ in YV0_MEMBERS]
     + [_b for _b, _ in BEAMSPOT_MEMBERS])
 
 
@@ -430,7 +435,7 @@ class Analysis():
     def _define_aleph_vars(self, df):
         """The ALEPH_VAR_BRANCHES (analyzer_alephvars.h). Placeholders (kNotAvailable = -999):
         per-track arrays of -999 and n_yv0_event = -999 with empty yv0 arrays; on data the
-        simulation-only block (trk_dEdx_wiresQDEDXM_*, trk_truePdg, trk_trueMotherPdg) is always a placeholder."""
+        simulation-only block (trk_dEdx_wiresQDEDXM_*, trk_true*) is always a placeholder."""
         AV = "FCCAnalyses::AlephVars"
         blocks = self._aleph_blocks
         if self.ana_args.doData:
@@ -446,13 +451,14 @@ class Analysis():
                                                  f'{AV}::{npar}, "{coll}", {empty_ok})')
             for b, m in members:
                 df = df.Define(f"trk_dEdx_{det}_{b}", f"trkDedx_{det}.{m}" if block in blocks else na_trk["float"])
-        # best-match MC particle of each track and its parent (simulation; -999 with an empty QDEDXM collection)
+        # best-match MC particle of each track, its parent, momentum and production vertex
+        # (simulation; -999 with an empty QDEDXM collection)
         if "truth" in blocks:
             df = df.Define("trkBestMatch", f"{AV}::trackBestMatchTruth(Tracks.size(), dEdxWiresQDEDXMPID.empty(), "
                                            "_dEdxWiresQDEDXMMCLink_from, _dEdxWiresQDEDXMMCLink_to, MCParticles, "
                                            "_MCParticles_parents)")
-        for b, m in (("trk_truePdg", "pdg"), ("trk_trueMotherPdg", "motherPdg")):
-            df = df.Define(b, f"trkBestMatch.{m}" if "truth" in blocks else na_trk["int"])
+        for b, m, t in TRK_TRUTH_MEMBERS:
+            df = df.Define(b, f"trkBestMatch.{m}" if "truth" in blocks else na_trk[t])
         # YV0V V0 candidates, daughters joined to the Tracks index through their RecoParticles
         if "yv0" in blocks:
             require_words = "false" if self.ana_args.oldConverter else "true"

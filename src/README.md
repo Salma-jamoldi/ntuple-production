@@ -372,8 +372,10 @@ Per track, arrays over the whole `Tracks` collection like `trk_member` (a leg re
 | `trk_dEdx_wiresQDEDXM_{value,expected_<h>,sigma_<h>,pull_<h>}` | simulation: ALPHA's simulated wire dE/dx (`QDEDXM`), for comparison | as above | as above; always on data |
 | `trk_truePdg` | simulation: PDG code of ALPHA's best-matching MC particle (`KBESTM`) | — | always on data; 0 = no best match |
 | `trk_trueMotherPdg` | simulation: PDG code of the immediate parent of that MC particle (`MCParticles` parents): a simulated particle for a detector-simulation secondary (the photon of a conversion electron), a quark for a hadron from the string | — | always on data; 0 = no best match or no parent |
+| `trk_trueP` | simulation: momentum of the best-matching MC particle | GeV | always on data; also with no best match (`trk_truePdg` 0) |
+| `trk_trueVtx_r`, `trk_trueVtx_z` | simulation: its production vertex (`MCParticles` vertex), distance from the z axis and z | cm | as `trk_trueP` |
 
-These differ from `pfcand_dEdx_*` and `<leg>_dEdx_*`, which read the `dEdxWires`/`dEdxPads` measurements of a dummy 1 GeV hypothesis (no pad value below about 0.15-0.2 GeV in 1994). A simulated event without the ALPHA MC banks (the MC truth, `FKIN`/`FVER` or `KINE`/`VERT`) has empty QDEDXM collections and reads −999 in `trk_dEdx_wiresQDEDXM_*`, `trk_truePdg` and `trk_trueMotherPdg`.
+These differ from `pfcand_dEdx_*` and `<leg>_dEdx_*`, which read the `dEdxWires`/`dEdxPads` measurements of a dummy 1 GeV hypothesis (no pad value below about 0.15-0.2 GeV in 1994). A simulated event without the ALPHA MC banks (the MC truth, `FKIN`/`FVER` or `KINE`/`VERT`) has empty QDEDXM collections and reads −999 in `trk_dEdx_wiresQDEDXM_*` and `trk_true*`.
 
 Per ALEPH V0 candidate (`YV0V`), in the order of `V0Vertices`, `n_yv0_event` per event (the Mini-DST keeps at most 29 per event in the 1994 data of version 202, 50 in simulation):
 
