@@ -24,8 +24,8 @@ through the particle -> track relation. Selection, in this order: exactly two
 jets; one jet with 1 and one with 3 charged constituents (types 0, 1, 2);
 no electron or muon in the 3-prong jet; every charged constituent with
 |d0| < 2 cm and |z0| < 10 cm (track parameters at the origin) and with TPC
-hits; every constituent above 1 % and the two jets together above 10 % of
-E_CM = 100 GeV.
+hits; every constituent above 1 GeV and the two jets together above 10 % of
+the centre-of-mass energy, 2 x EVT_Ebeam.
 
 Output branches. pfcand_* are per jet and per constituent (jet index first);
 pfcand3_* / pfcand1_* are copies for the 3-prong / 1-prong jet only of every
@@ -80,7 +80,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import run_list
 
-E_CM = 100.                 # reference energy of the energy cuts [GeV]
+MIN_CONSTITUENT_E = 1.      # minimum energy of every constituent of both jets [GeV]
 # ALPHA dE/dx hypotheses h, in the order of AlephVars in analyzer_alephvars.h (as in stage1)
 DEDX_HYPOS = ("ele", "mu", "pi", "kaon", "proton")
 # converter collections the dE/dx, LEP-energy and truth branches read; the second set MC only
@@ -283,9 +283,10 @@ class Analysis():
         # ------------------------------------------------------------
         df = df.Define("pfcand_e",  "JetConstituentsUtils::get_e(jetc)")
 
-        df = df.Filter(f"All(pfcand_e[0] > 0.01*{E_CM}) && All(pfcand_e[1] > 0.01*{E_CM})", "per_track_energy")
+        df = df.Filter(f"All(pfcand_e[0] > {MIN_CONSTITUENT_E}) && All(pfcand_e[1] > {MIN_CONSTITUENT_E})", "per_track_energy")
 
-        df = df.Filter(f"Sum(pfcand_e[0]) + Sum(pfcand_e[1]) > 0.1*{E_CM}", "total_energy")
+        # the two jets together above 10 % of the centre-of-mass energy, 2 x the LEP beam energy
+        df = df.Filter("Sum(pfcand_e[0]) + Sum(pfcand_e[1]) > 0.1*2*EVT_Ebeam", "total_energy")
         df = df.Define("pfcand_p",  "JetConstituentsUtils::get_p(jetc)")
         df = df.Define("pfcand_px", "JetConstituentsUtils::get_px(jetc)")
         df = df.Define("pfcand_py", "JetConstituentsUtils::get_py(jetc)")
