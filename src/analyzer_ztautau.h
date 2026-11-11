@@ -110,7 +110,7 @@ inline ROOT::VecOps::RVec<FCCAnalysesJetConstituentsData> get_true_p_from_index(
     }
     return out;
   }
-
+/*
 // Charged multiplicity per jet -> tau prong count.
 ROOT::VecOps::RVec<int> count_charged(
     ROOT::VecOps::RVec<ROOT::VecOps::RVec<bool>> isChargedHad,
@@ -123,6 +123,18 @@ ROOT::VecOps::RVec<int> count_charged(
       if (isChargedHad.at(i).at(j) || isMu.at(i).at(j) || isEl.at(i).at(j)) ++n;
     }
     result.push_back(n);
+  }
+  return result;
+}
+*/
+// Charged multiplicity per jet -> tau prong count.
+ROOT::VecOps::RVec<int> count_charged(
+    const ROOT::VecOps::RVec<ROOT::VecOps::RVec<int>> &pfcand_charge) {
+  ROOT::VecOps::RVec<int> result;
+  result.reserve(pfcand_charge.size());
+  for (const auto &jet : pfcand_charge) {
+    result.push_back(static_cast<int>(
+        std::count_if(jet.begin(), jet.end(), [](int q) { return q != 0; })));
   }
   return result;
 }

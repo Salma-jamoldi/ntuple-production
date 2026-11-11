@@ -224,8 +224,9 @@ class Analysis():
 
         # Charged multiplicity per jet == tau prong count.
         # AlephSelection::count_charged is NEW - see analyzer_ztautau.h
-        df = df.Define("jet_nCharged", "AlephSelection::count_charged(pfcand_isChargedHad, pfcand_isMu, pfcand_isEl)")
- 
+        #df = df.Define("jet_nCharged", "AlephSelection::count_charged(pfcand_isChargedHad, pfcand_isMu, pfcand_isEl)")
+        df = df.Define("pfcand_charge",   "JetConstituentsUtils::get_charge(jetc)")
+        df = df.Define("jet_nCharged", "AlephSelection::count_charged(pfcand_charge)")
         # Select one 1-prong hemisphere and one 3-prong hemisphere (either jet index)
         df = df.Filter("(jet_nCharged[0]==1 && jet_nCharged[1]==3) || (jet_nCharged[0]==3 && jet_nCharged[1]==1)", "1p3p_topology")
 
@@ -245,7 +246,7 @@ class Analysis():
         # i.e. no accompanying pi0/photon - isolates pi-nu and 3pi-nu
         # specifically, excluding rho->pi pi0 and a1->3pi pi0.
         df = df.Define("j3", "jet_nCharged[0]==3 ? 0 : 1")
-        df = df.Filter("jet_isHadronic[j3]", "3prong_hadronic")
+        #df = df.Filter("jet_isHadronic[j3]", "3prong_hadronic")
 
         df = df.Define("j1", "jet_nCharged[0]==1 ? 0 : 1")
 
@@ -291,8 +292,8 @@ class Analysis():
         df = df.Define("pfcand_px", "JetConstituentsUtils::get_px(jetc)")
         df = df.Define("pfcand_py", "JetConstituentsUtils::get_py(jetc)")
         df = df.Define("pfcand_pz", "JetConstituentsUtils::get_pz(jetc)")
-        df = df.Define("pfcand_charge", "JetConstituentsUtils::get_charge(jetc)")
-
+        df = df.Define("j3_has_ee", "AlephSelection::jet_has_ee_pair(pfcand_px[j3], pfcand_py[j3], pfcand_pz[j3], pfcand_charge[j3])")
+        df = df.Filter("!j3_has_ee", "conversion_veto")
         # ------------------------------------------------------------
         # Track index, baseline track selection and the per-track ALEPH
         # variables of each constituent
