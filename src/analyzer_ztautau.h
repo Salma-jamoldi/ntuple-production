@@ -17,6 +17,7 @@
 #include "podio/ObjectID.h"
 
 #include "analyzer.h"
+#include "analyzer_pvnew.h"
 
 namespace FCCAnalyses { namespace MCTruthMatching{
 
@@ -337,6 +338,22 @@ ROOT::VecOps::RVec<float> get_charged_invmass(
     result.push_back(m2 > 0 ? std::sqrt(m2) : -std::sqrt(-m2));
   }
   return result;
+}
+
+// Common vertex of the charged constituents (charge != 0, with a track) of jet
+// `jet`: one fit with stage1's standalone vertex fitter (analyzer_pvnew.h), no
+// beam-spot constraint and no track removal. `states` = ALEPH-flipped track
+// states ordered by the RecoParticle -> Track relation (TrackStateByRP).
+// converged == false: the values must not be used (status says why).
+inline AlephPVNew::PVFitResult fit_jet_vertex(
+    const ROOT::VecOps::RVec<FCCAnalysesJetConstituents> &jcs, int jet,
+    const ROOT::VecOps::RVec<edm4hep::TrackState> &states) {
+  ROOT::VecOps::RVec<edm4hep::TrackState> trk;
+  for (const auto &rp : jcs.at(jet))
+    if (rp.charge != 0 && hasOwnTrack(rp, states.size()))
+      trk.push_back(states[rp.tracks_begin]);
+  return AlephPVNew::detail::fit_core(AlephPVNew::detail::convert(trk), nullptr,
+                                      AlephPVNew::FitConfig{});
 }
 
 }} // namespace FCCAnalyses::AlephSelection

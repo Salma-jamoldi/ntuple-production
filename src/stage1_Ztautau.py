@@ -42,6 +42,15 @@ undefined in ().
     jet_min_TPChits_charged            fewest TPC hits of the jet's charged constituents (-1)
     tau_visible_mass, tau_charged_mass mass of the jet, of its charged constituents [GeV]
     tau3_visible_mass, tau3_charged_mass   the same for the 3-prong jet
+  Vertex of the 3-prong jet: one fit of the tracks of its charged constituents with stage1's
+  vertex fitter (analyzer_pvnew.h), no beam-spot constraint, no track removal
+    tau3_vtx_converged                 1 = the fit converged; chi2 and position are defined only then
+    tau3_vtx_status                    0 = converged, 1 = iteration cap, 2 = stalled (no step lowers
+                                       the chi2), 3 = singular vertex covariance, 4 = fewer than 2
+                                       tracks or no start point
+    tau3_vtx_ndf                       degrees of freedom, 2 x tracks - 3 (0)
+    tau3_vtx_chi2                      total fit chi2, not divided by ndf (-1)
+    tau3_vtx_x, _y, _z                 fitted vertex [cm] (-999)
   Constituents
     pfcand_isMu, _isEl, _isChargedHad, _isGamma, _isNeutralHad   1 = energy-flow type 2, 1, 0, 4, 5
     pfcand_e, _p, _px, _py, _pz [GeV], pfcand_charge [e]
@@ -345,6 +354,15 @@ class Analysis():
                                              "pfcand_isChargedHad, pfcand_isMu, pfcand_isEl)")
         df = df.Define("tau3_visible_mass", "tau_visible_mass[j3]")
         df = df.Define("tau3_charged_mass", "tau_charged_mass[j3]")
+
+        # Vertex of the 3-prong jet (fit_jet_vertex, analyzer_ztautau.h)
+        df = df.Define("_tau3_vtx", "AlephSelection::fit_jet_vertex(jetc, j3, TrackStateByRP)")
+        df = df.Define("tau3_vtx_converged", "_tau3_vtx.converged")
+        df = df.Define("tau3_vtx_status", "_tau3_vtx.status")
+        df = df.Define("tau3_vtx_ndf", "_tau3_vtx.ndf")
+        df = df.Define("tau3_vtx_chi2", "_tau3_vtx.converged ? float(_tau3_vtx.chi2) : -1.f")
+        for k, c in enumerate("xyz"):
+            df = df.Define(f"tau3_vtx_{c}", f"_tau3_vtx.converged ? float(_tau3_vtx.position[{k}]) : -999.f")
  
         # Track-quality bookkeeping (kept from the qq treemaker)
         df = df.Define("pfcand_trackChi2",     "AlephSelection::get_constituent_trackChi2(jetc, TracksByRP)")
@@ -414,6 +432,8 @@ class Analysis():
             "tau_charged_mass",
             "tau3_visible_mass",
             "tau3_charged_mass",
+            "tau3_vtx_converged", "tau3_vtx_status", "tau3_vtx_ndf", "tau3_vtx_chi2",
+            "tau3_vtx_x", "tau3_vtx_y", "tau3_vtx_z",
 
             "pfcand_isMu", "pfcand_isEl", "pfcand_isChargedHad", "pfcand_isGamma", "pfcand_isNeutralHad",
             "pfcand_e", "pfcand_p", "pfcand_px", "pfcand_py", "pfcand_pz", "pfcand_charge",
