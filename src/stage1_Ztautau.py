@@ -72,10 +72,14 @@ undefined in ().
                                        MC only: the same from ALPHA's parametrised simulation QDEDXM
   MC only (PDG codes: +211 = pi+, but +11 = e-)
     MC_pdg, MC_status, MC_momentum_{x,y,z}, MC_vertex_{x,y,z}   all MC particles [GeV, cm]
+    MC_parent_index                    index in MCParticles of the particle's first parent (-1 = none)
     pfcand_mc_pdg                      PDG code of ALPHA's best-match MC particle of the constituent's
                                        track (KBESTM); 0 = none, -999 = no track or no ALPHA MC banks
     pfcand_mc_index                    its index in MCParticles (-1 = none; -999 as pfcand_mc_pdg)
     pfcand_mc_momentum                 its momentum [GeV] (-999)
+    pfcand_mc_parent_pdg               PDG code of the first parent of that particle; 0 = no best match or
+                                       no parent, -999 as pfcand_mc_pdg
+    pfcand_mc_parent_index             its index in MCParticles (-1 = none; -999 as pfcand_mc_pdg)
     jet3_mc_index                      pfcand_mc_index of the 3-prong jet
     jet3_same_vertex                   the best-match particles of the 3-prong jet share their production
                                        vertex (false with fewer than two of them)
@@ -189,6 +193,10 @@ class Analysis():
             df = df.Define("MC_momentum_x", "MCParticle::get_px(MCParticles)")
             df = df.Define("MC_momentum_y", "MCParticle::get_py(MCParticles)")
             df = df.Define("MC_momentum_z", "MCParticle::get_pz(MCParticles)")
+            df = df.Define("MC_parent_index", "ROOT::VecOps::RVec<int> r(MCParticles.size(), -1); "
+                                              "for (std::size_t i = 0; i < MCParticles.size(); ++i) "
+                                              "if (MCParticles[i].parents_end > MCParticles[i].parents_begin) "
+                                              "r[i] = _MCParticles_parents.at(MCParticles[i].parents_begin).index; return r;")
             # ALPHA's best-match MC particle of every track (KBESTM), arrays over Tracks
             df = df.Define("trkBestMatch", f"{AV}::trackBestMatchTruth(Tracks.size(), dEdxWiresQDEDXMPID.empty(), "
                                            "_dEdxWiresQDEDXMMCLink_from, _dEdxWiresQDEDXMMCLink_to, MCParticles, "
@@ -377,6 +385,9 @@ class Analysis():
             df = df.Define("pfcand_mc_index", per_constituent("ROOT::VecOps::RVec<float>(trkBestMatch.idx.begin(), trkBestMatch.idx.end())",
                                                               "float", f"{AV}::kNotAvailable"))
             df = df.Define("pfcand_mc_momentum", per_constituent("trkBestMatch.p", "float", f"{AV}::kNotAvailable"))
+            df = df.Define("pfcand_mc_parent_pdg", per_constituent("trkBestMatch.motherPdg", "int", f"{AV}::kNotAvailableInt"))
+            df = df.Define("pfcand_mc_parent_index", per_constituent("ROOT::VecOps::RVec<float>(trkBestMatch.motherIdx.begin(), "
+                                                                     "trkBestMatch.motherIdx.end())", "float", f"{AV}::kNotAvailable"))
 
         # slice every per-jet / per-constituent branch down to just that hemisphere
         self.slice_branches = []
@@ -384,7 +395,7 @@ class Analysis():
                   "pfcand_e", "pfcand_p", "pfcand_px", "pfcand_py", "pfcand_pz", "pfcand_charge", "pfcand_d0", "pfcand_z0",
                   "pfcand_nTrackHits_TPC", "pfcand_trackIdx", "pfcand_trkBaseline"] + self.dedx_branches
         if not self.ana_args.doData:
-            sliced += ["pfcand_mc_pdg", "pfcand_mc_index", "pfcand_mc_momentum"]
+            sliced += ["pfcand_mc_pdg", "pfcand_mc_index", "pfcand_mc_momentum", "pfcand_mc_parent_pdg", "pfcand_mc_parent_index"]
         for b in sliced:
             for h in ("3", "1"):
                 self.slice_branches.append(b.replace("pfcand_", f"pfcand{h}_"))
@@ -446,9 +457,9 @@ class Analysis():
         if not self.ana_args.doData:
             branchList += [
                 "MC_pdg", "MC_status",
-                "MC_momentum_x", "MC_momentum_y", "MC_momentum_z",
+                "MC_momentum_x", "MC_momentum_y", "MC_momentum_z", "MC_parent_index",
 
-                "pfcand_mc_pdg", "pfcand_mc_index", "pfcand_mc_momentum",
+                "pfcand_mc_pdg", "pfcand_mc_index", "pfcand_mc_momentum", "pfcand_mc_parent_pdg", "pfcand_mc_parent_index",
 
                 "jet3_mc_index",
                 "MC_vertex_x", "MC_vertex_y", "MC_vertex_z",
