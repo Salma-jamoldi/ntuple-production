@@ -17,6 +17,7 @@
 #include "podio/ObjectID.h"
 
 #include "analyzer.h"
+#include "analyzer_alephvars.h"
 #include "analyzer_pvnew.h"
 
 namespace FCCAnalyses { namespace MCTruthMatching{
@@ -354,6 +355,109 @@ inline AlephPVNew::PVFitResult fit_jet_vertex(
       trk.push_back(states[rp.tracks_begin]);
   return AlephPVNew::detail::fit_core(AlephPVNew::detail::convert(trk), nullptr,
                                       AlephPVNew::FitConfig{});
+}
+
+// The three 2-track vertices of the charged constituents (charge != 0, with a
+// track) c0, c1, c2 of jet `jet`, in the pair order (c0,c1), (c0,c2), (c1,c2):
+// each pair fitted alone with the fitter of fit_jet_vertex (no beam spot).
+// leg1/leg2 = the legs' indices in the jet's constituent list (-1: the jet has
+// fewer charged constituents). Momenta at the vertex: the helix tangent at each
+// track's phase of closest approach to the fitted vertex, pT = kPtPerTeslaCm *
+// bz / |omega|; mee = pair mass with the electron mass for both legs
+// (AlephVars::pairMass), qt = Armenteros qT (AlephTrkAux::apVars). Undefined:
+// charge -999 without a pair; chi2, mee, qt -1 and position -999 when the fit
+// did not converge.
+struct JetPairVertices {
+  ROOT::VecOps::RVec<int> leg1, leg2, converged, status, charge;
+  ROOT::VecOps::RVec<float> chi2, x, y, z, mee, qt;
+};
+
+inline JetPairVertices fit_jet_pair_vertices(
+    const ROOT::VecOps::RVec<FCCAnalysesJetConstituents> &jcs, int jet,
+    const ROOT::VecOps::RVec<edm4hep::TrackState> &states, float bz) {
+  namespace D = AlephPVNew::detail;
+  const auto &jc = jcs.at(jet);
+  std::vector<int> charged;
+  for (int k = 0; k < (int)jc.size(); ++k)
+    if (jc[k].charge != 0 && hasOwnTrack(jc[k], states.size())) charged.push_back(k);
+  const AlephPVNew::FitConfig cfg{};
+  constexpr int kPairs[3][2] = {{0, 1}, {0, 2}, {1, 2}};
+  JetPairVertices out;
+  for (const auto &pr : kPairs) {
+    const bool have = (int)charged.size() > pr[1];
+    const int a = have ? charged[pr[0]] : -1, b = have ? charged[pr[1]] : -1;
+    out.leg1.push_back(a);
+    out.leg2.push_back(b);
+    out.charge.push_back(have ? (int)std::lround(jc[a].charge + jc[b].charge)
+                              : AlephVars::kNotAvailableInt);
+    AlephPVNew::PVFitResult f;  // default: not converged, kTooFewTracks
+    ROOT::VecOps::RVec<edm4hep::TrackState> trk;
+    if (have) {
+      trk = {states[jc[a].tracks_begin], states[jc[b].tracks_begin]};
+      f = D::fit_core(D::convert(trk), nullptr, cfg);
+    }
+    out.converged.push_back(f.converged ? 1 : 0);
+    out.status.push_back(f.status);
+    if (!f.converged) {
+      out.chi2.push_back(-1.f);
+      out.x.push_back(-999.f);
+      out.y.push_back(-999.f);
+      out.z.push_back(-999.f);
+      out.mee.push_back(-1.f);
+      out.qt.push_back(-1.f);
+      continue;
+    }
+    out.chi2.push_back(f.chi2);
+    out.x.push_back(f.position[0]);
+    out.y.push_back(f.position[1]);
+    out.z.push_back(f.position[2]);
+    // phases of closest approach to the fitted vertex (the fit's own phase refinement)
+    const D::TrackSet ts = D::convert(trk);
+    const AlephPVNew::Vec3 xv(f.position[0], f.position[1], f.position[2]);
+    std::vector<double> L(2, 0.0);
+    D::TrackTerms tt;
+    for (int r = 0; r < 3; ++r) {
+      D::track_terms(ts, xv, L, cfg, tt);
+      L = tt.L;
+    }
+    TVector3 p[2];
+    for (int i = 0; i < 2; ++i) {
+      const AlephPVNew::Vec3 t = D::helix_dXdL(ts.par[i], L[i]);  // (cos phi, sin phi, tan lambda)
+      const double pt = AlephUnits::kPtPerTeslaCm * bz / std::abs(trk[i].omega);
+      p[i].SetXYZ(pt * t(0), pt * t(1), pt * t(2));
+    }
+    out.mee.push_back(AlephVars::pairMass(p[0], AlephMasses::kElectron, p[1], AlephMasses::kElectron));
+    double alpha, qt;
+    AlephTrkAux::apVars(p[0], p[1], jc[a].charge > 0 ? 1. : -1., alpha, qt);
+    out.qt.push_back(qt);
+  }
+  return out;
+}
+
+// values[leg] per pair (undefined for leg -1): the per-constituent value of one
+// leg of each pair, from a per-constituent array of the same jet.
+template <typename T>
+inline ROOT::VecOps::RVec<T> pair_leg_value(const ROOT::VecOps::RVec<T> &values,
+                                            const ROOT::VecOps::RVec<int> &legs, T undefined) {
+  ROOT::VecOps::RVec<T> out;
+  for (int l : legs) out.push_back(l >= 0 && l < (int)values.size() ? values[l] : undefined);
+  return out;
+}
+
+// 1 = both legs' best-match particles are distinct e+- with the same first
+// parent, a photon (pdg 22); per pair, from the pair_leg_value truth arrays.
+inline ROOT::VecOps::RVec<int> pair_truth_conversion(
+    const ROOT::VecOps::RVec<int> &pdg_a, const ROOT::VecOps::RVec<int> &pdg_b,
+    const ROOT::VecOps::RVec<float> &idx_a, const ROOT::VecOps::RVec<float> &idx_b,
+    const ROOT::VecOps::RVec<int> &parent_pdg_a,
+    const ROOT::VecOps::RVec<float> &parent_idx_a,
+    const ROOT::VecOps::RVec<float> &parent_idx_b) {
+  ROOT::VecOps::RVec<int> out;
+  for (size_t k = 0; k < pdg_a.size(); ++k)
+    out.push_back(std::abs(pdg_a[k]) == 11 && std::abs(pdg_b[k]) == 11 && idx_a[k] >= 0 &&
+                  idx_b[k] >= 0 && idx_a[k] != idx_b[k] && parent_idx_a[k] >= 0 &&
+                  parent_idx_a[k] == parent_idx_b[k] && parent_pdg_a[k] == 22);
+  return out;
 }
 
 }} // namespace FCCAnalyses::AlephSelection

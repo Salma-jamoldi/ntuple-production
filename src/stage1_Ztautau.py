@@ -51,6 +51,17 @@ undefined in ().
     tau3_vtx_ndf                       degrees of freedom, 2 x tracks - 3 (0)
     tau3_vtx_chi2                      total fit chi2, not divided by ndf (-1)
     tau3_vtx_x, _y, _z                 fitted vertex [cm] (-999)
+  2-track vertices of the 3-prong jet, inputs of a photon-conversion check (no cut): each pair of
+  its charged constituents c0, c1, c2 (jet order) fitted alone with the same fitter; arrays of 3
+  pairs in the order (c0,c1), (c0,c2), (c1,c2)
+    tau3_pair_leg1, _leg2              the two legs' indices in the pfcand3_* arrays (-1)
+    tau3_pair_converged, _status       as tau3_vtx_converged, tau3_vtx_status (one degree of freedom)
+    tau3_pair_charge                   sum of the two charges, 0 = opposite charges [e] (-999)
+    tau3_pair_chi2                     fit chi2 (-1)
+    tau3_pair_x, _y, _z                fitted vertex [cm] (-999)
+    tau3_pair_mee                      pair mass with the electron mass for both legs, from the
+                                       momenta at the fitted vertex [GeV] (-1)
+    tau3_pair_qt                       Armenteros qT of the pair at the fitted vertex [GeV] (-1)
   Constituents
     pfcand_isMu, _isEl, _isChargedHad, _isGamma, _isNeutralHad   1 = energy-flow type 2, 1, 0, 4, 5
     pfcand_e, _p, _px, _py, _pz [GeV], pfcand_charge [e]
@@ -85,6 +96,11 @@ undefined in ().
                                        vertex (false with fewer than two of them)
     truth_tau3pi_mass                  mass of those particles and of the tau neutrino produced at their
                                        vertex [GeV] (-1)
+    tau3_pair_mc_{pdg,index,parent_pdg,parent_index}_{a,b}
+                                       pfcand3_mc_* of leg 1 (a) and leg 2 (b) of each 2-track vertex
+                                       (-999 without that leg)
+    tau3_pair_truth_conv               1 = both legs' best-match particles are distinct e+- with the
+                                       same first parent, a photon
 """
 from argparse import ArgumentParser
 import os 
@@ -372,6 +388,15 @@ class Analysis():
         for k, c in enumerate("xyz"):
             df = df.Define(f"tau3_vtx_{c}", f"_tau3_vtx.converged ? float(_tau3_vtx.position[{k}]) : -999.f")
  
+        # The three 2-track vertices of the 3-prong jet (fit_jet_pair_vertices, analyzer_ztautau.h): inputs
+        # of a photon-conversion check, no cut here
+        df = df.Define("_tau3_pair", f"AlephSelection::fit_jet_pair_vertices(jetc, j3, TrackStateByRP, "
+                                     f"{AV}::alephRunInfo(RunInformation, true).bz)")
+        self.pair_branches = []
+        for m in ("leg1", "leg2", "converged", "status", "charge", "chi2", "x", "y", "z", "mee", "qt"):
+            self.pair_branches.append(f"tau3_pair_{m}")
+            df = df.Define(self.pair_branches[-1], f"_tau3_pair.{m}")
+
         # Track-quality bookkeeping (kept from the qq treemaker)
         df = df.Define("pfcand_trackChi2",     "AlephSelection::get_constituent_trackChi2(jetc, TracksByRP)")
         df = df.Define("pfcand_trackNdof",     "AlephSelection::get_constituent_trackNdof(jetc, TracksByRP)")
@@ -424,6 +449,19 @@ class Analysis():
             df = df.Define("truth_tau3pi_mass",
             "AlephSelection::truth_tau_mass_3pi_nu(jet3_mc_index, MCParticles, "
             "MC_vertex_x, MC_vertex_y, MC_vertex_z, 1e-3f)")
+            # truth origin of the two legs of each 2-track vertex, and the common-photon-parent flag
+            for q, elem, undef in (("pdg", "int", f"{AV}::kNotAvailableInt"), ("index", "float", f"{AV}::kNotAvailable"),
+                                   ("parent_pdg", "int", f"{AV}::kNotAvailableInt"),
+                                   ("parent_index", "float", f"{AV}::kNotAvailable")):
+                for leg, s in (("leg1", "a"), ("leg2", "b")):
+                    self.pair_branches.append(f"tau3_pair_mc_{q}_{s}")
+                    df = df.Define(self.pair_branches[-1], f"AlephSelection::pair_leg_value<{elem}>(pfcand3_mc_{q}, "
+                                                           f"tau3_pair_{leg}, {undef})")
+            self.pair_branches.append("tau3_pair_truth_conv")
+            df = df.Define("tau3_pair_truth_conv", "AlephSelection::pair_truth_conversion(tau3_pair_mc_pdg_a, "
+                                                   "tau3_pair_mc_pdg_b, tau3_pair_mc_index_a, tau3_pair_mc_index_b, "
+                                                   "tau3_pair_mc_parent_pdg_a, tau3_pair_mc_parent_index_a, "
+                                                   "tau3_pair_mc_parent_index_b)")
 
         return df
         
@@ -445,6 +483,7 @@ class Analysis():
             "tau3_charged_mass",
             "tau3_vtx_converged", "tau3_vtx_status", "tau3_vtx_ndf", "tau3_vtx_chi2",
             "tau3_vtx_x", "tau3_vtx_y", "tau3_vtx_z",
+        ] + self.pair_branches + [
 
             "pfcand_isMu", "pfcand_isEl", "pfcand_isChargedHad", "pfcand_isGamma", "pfcand_isNeutralHad",
             "pfcand_e", "pfcand_p", "pfcand_px", "pfcand_py", "pfcand_pz", "pfcand_charge",
